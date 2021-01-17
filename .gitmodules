@@ -1,0 +1,3 @@
+[submodule "qkdmodule"]
+	path = qkdmodule
+	url = https://github.com/ignaziopedone/qkd-module

@@ -1,0 +1,27 @@
+global:
+  qkd_protocol: BB84
+  log_level: 0
+  timeout: 300000
+
+internal_db:
+  host: 172.16.0.2
+  user: root
+  passwd: dummypassword
+  database: bob_data
+
+vault:
+  host: 172.16.0.4
+  port: 8200
+  token: s.EOGNOwAgUt6ff6Ifqu3mBp9j
+  unseal1: 0aa3e6372ca61d6a232f30aadf70e489bbc45787761f89ca8564b2816c98ae9b8d
+  unseal2: f67b2d8eee2f193b046081cb94e45b9b2bbed6996155102dc1ec6676459fa9ffec
+
+settings:
+  KME_ID: KME11223344
+  ASSIGNED_ID_PREFIX: AABC
+  DEF_KEY_SIZE: 32
+  MAX_KEY_COUNT: 500
+  MAX_KEY_PER_REQUEST: 3
+  MAX_KEY_SIZE: 32
+  MIN_KEY_SIZE: 8
+  MAX_SAE_ID_COUNT: 0

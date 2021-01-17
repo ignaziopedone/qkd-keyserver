@@ -1,0 +1,27 @@
+global:
+  qkd_protocol: BB84
+  log_level: 0
+  timeout: 300000
+
+internal_db:
+  host: 172.16.0.2
+  user: root
+  passwd: dummypassword
+  database: alice_data
+
+vault:
+  host: 172.16.0.3
+  port: 8200
+  token: s.qSYNEKbCQVlGEO9QG4IOmwkd
+  unseal1: 62cbf8b7c181822c774d95d6ae5bd29d8f97f642f30cdcb6cc511869447131dcf8
+  unseal2: d818f6a40a94882d78feb4fbf84f89e2b29a5ef6e45d3b3beae4dfc08a06351d63
+
+settings:
+  KME_ID: KME55667788
+  ASSIGNED_ID_PREFIX: AABC
+  DEF_KEY_SIZE: 32
+  MAX_KEY_COUNT: 500
+  MAX_KEY_PER_REQUEST: 3
+  MAX_KEY_SIZE: 32
+  MIN_KEY_SIZE: 8
+  MAX_SAE_ID_COUNT: 0

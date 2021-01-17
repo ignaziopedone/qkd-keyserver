@@ -1,0 +1,28 @@
+internal_db:
+  host: 172.16.0.2
+  user: root
+  passwd: dummypassword
+  database: bob_data
+
+simulator:
+  table: bb
+  eve: no
+  private_key: b'124986546848776451342111546854654643545484981234>\xff\xb3\xa9\x96F\x94\xbc\xadHz\xca\xcd\xc7+.'
+  public_key: b'64ewf98wqrsdfft1^\xbf\x9a\x1e\xdc\xac+\x94\x06E\x12\xfa?\xa2\xddf'
+
+module:
+  table: handles
+  sender: 0
+  sim: fake 
+  # sim: bb84
+
+log_db:
+  host: 172.16.0.2
+  user: root
+  passwd: dummypassword
+  database: log
+
+vault:
+  host: 172.16.0.4
+  token: s.EOGNOwAgUt6ff6Ifqu3mBp9j
+  port: 8200
