@@ -186,7 +186,7 @@ CREATE TABLE `exchangedKeys` (
 
 LOCK TABLES `exchangedKeys` WRITE;
 /*!40000 ALTER TABLE `exchangedKeys` DISABLE KEYS */;
-INSERT INTO `exchangedKeys` VALUES ('KME55667788','172.16.0.7',4000,'68e3f6d0-d273-11ea-aada-ffeca5cd1502',NULL,0,128,500,3,128,8,0);
+INSERT INTO `exchangedKeys` VALUES ('KME55667788','10.0.2.15',6000,'68e3f6d0-d273-11ea-aada-ffeca5cd1502',NULL,0,128,500,3,128,8,0);
 /*!40000 ALTER TABLE `exchangedKeys` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -254,19 +254,10 @@ CREATE TABLE `qkdmodules` (
   `module` varchar(255) NOT NULL,
   `protocol` varchar(255) DEFAULT NULL,
   `moduleIP` varchar(255) NOT NULL,
+  `max_key_count` int DEFAULT 0,
   PRIMARY KEY (`moduleID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `qkdmodules`
---
-
-LOCK TABLES `qkdmodules` WRITE;
-/*!40000 ALTER TABLE `qkdmodules` DISABLE KEYS */;
-INSERT INTO `qkdmodules` VALUES ('93ae0cc8-d027-11ea-a0dd-7351ed81d70e','b\'gANjUUtETW9kdWxlClFLRE1vZHVsZQpxACmBcQEu\'','BB84','172.16.0.6:5000');
-/*!40000 ALTER TABLE `qkdmodules` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `reservedKeys`
@@ -473,7 +464,7 @@ CREATE TABLE `exchangedKeys` (
 
 LOCK TABLES `exchangedKeys` WRITE;
 /*!40000 ALTER TABLE `exchangedKeys` DISABLE KEYS */;
-INSERT INTO `exchangedKeys` VALUES ('KME11223344','172.16.0.6',4000,'68e3f6d0-d273-11ea-aada-ffeca5cd1502',NULL,0,128,500,3,128,8,0);
+INSERT INTO `exchangedKeys` VALUES ('KME11223344','10.0.2.15',4000,'68e3f6d0-d273-11ea-aada-ffeca5cd1502',NULL,0,128,500,3,128,8,0);
 /*!40000 ALTER TABLE `exchangedKeys` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -541,19 +532,11 @@ CREATE TABLE `qkdmodules` (
   `module` varchar(255) NOT NULL,
   `protocol` varchar(255) DEFAULT NULL,
   `moduleIP` varchar(255) NOT NULL,
+  `max_key_count` int DEFAULT 0,
   PRIMARY KEY (`moduleID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `qkdmodules`
---
-
-LOCK TABLES `qkdmodules` WRITE;
-/*!40000 ALTER TABLE `qkdmodules` DISABLE KEYS */;
-INSERT INTO `qkdmodules` VALUES ('93ae0cc8-d027-11ea-a0dd-7351ed81d70e','b\'gANjUUtETW9kdWxlClFLRE1vZHVsZQpxACmBcQEu\'','BB84','172.16.0.7:5000');
-/*!40000 ALTER TABLE `qkdmodules` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `reservedKeys`

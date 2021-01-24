@@ -1,5 +1,6 @@
 version: '2.1'
 
+
 networks:
   frontend:
     ipam:
@@ -12,7 +13,10 @@ services:
     networks:
       frontend:
         ipv4_address: 172.16.0.2
+    #network_mode: host
     container_name: database
+    ports:
+      - "3307:3306"
     command: --init-file /data/application/db_init.sql
     restart: "on-failure"
     volumes:
@@ -25,32 +29,16 @@ services:
     image: vault
     container_name: alice-vault
     ports:
-      - "8201:8200"
+      - "8200:8200"
     networks:
       frontend:
         ipv4_address: 172.16.0.3
+    #network_mode: host
     restart: "on-failure"
     volumes:
       - ./volumes/alice-vault/logs:/vault/logs
       - ./volumes/alice-vault/file:/vault/file
       - ./volumes/alice-vault/config:/vault/config
-    cap_add:
-      - IPC_LOCK
-    entrypoint: vault server -config=/vault/config/vault.json
-
-  vault2:
-    image: vault
-    container_name: bob-vault
-    ports:
-      - "8200:8200"
-    networks:
-      frontend:
-        ipv4_address: 172.16.0.4
-    restart: "on-failure"
-    volumes:
-      - ./volumes/bob-vault/logs:/vault/logs
-      - ./volumes/bob-vault/file:/vault/file
-      - ./volumes/bob-vault/config:/vault/config
     cap_add:
       - IPC_LOCK
     entrypoint: vault server -config=/vault/config/vault.json
@@ -67,30 +55,23 @@ services:
     networks:
       frontend:
         ipv4_address: 172.16.0.5
+    #network_mode: host
     restart: "on-failure"
 
 
   alice:
-    build: .
+    image: ignaziopedone/qkd:keyserver-1.2
     container_name: alice-server
+    ports:
+      - 4000:4000
     networks:
       frontend:
         ipv4_address: 172.16.0.6
+    #network_mode: host
     restart: "on-failure"
     volumes:
       - ./volumes/alice:/usr/src/app/config
+      - ./volumes/source:/usr/src/app/src
     depends_on:
       - vault1
-
-
-  bob:
-    build: .
-    container_name: bob-server
-    networks:
-      frontend:
-        ipv4_address: 172.16.0.7
-    restart: "on-failure"
-    volumes:
-      - ./volumes/bob:/usr/src/app/config
-    depends_on:
-      - vault2
+      - mysql

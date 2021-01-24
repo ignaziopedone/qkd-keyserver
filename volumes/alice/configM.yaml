@@ -1,5 +1,6 @@
 internal_db:
-  host: 172.16.0.2
+  host: 10.0.2.15
+  port: 3307
   user: root
   passwd: dummypassword
   database: alice_data
@@ -17,12 +18,13 @@ module:
   # sim: bb84
 
 log_db:
-  host: 172.16.0.2
+  host: 10.0.2.15
+  port: 3307
   user: root
   passwd: dummypassword
   database: log
 
 vault:
-  host: 172.16.0.3
+  host: 10.0.2.15
   token: s.qSYNEKbCQVlGEO9QG4IOmwkd
   port: 8200

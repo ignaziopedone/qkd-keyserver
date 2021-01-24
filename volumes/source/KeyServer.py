@@ -7,7 +7,6 @@ import mysql.connector
 import hvac
 from threading import Thread, Lock
 import uuid
-import qkdmodule.QKDModule
 import ssl
 from poly1305_aes import authenticate, verify
 import time
@@ -24,8 +23,15 @@ SAE_ID_Addr = {}    # connect SAEs' ID with their IP address
 authenticatedHost = {} # authorization list
 challenges = {}	# authorization challenges
 completedKeys = {} # synchronization list
-pref_file = open("config/config.yaml", 'r')
+pref_file = open("/usr/src/app/config/config.yaml", 'r')
 prefs = yaml.safe_load(pref_file)
+
+USE_TLS = prefs['global']['tls']['enabled']
+verifyCert = prefs['global']['tls']['verify']
+clientCert = prefs['global']['tls']['clientCert']
+clientKey = prefs['global']['tls']['clientKey']
+serverCert = prefs['global']['tls']['serverCert']
+serverKey = prefs['global']['tls']['serverCert']
 
 
 # error codes
@@ -40,8 +46,8 @@ serverPort = 4000
 
 app.config.update({
 	'SECRET_KEY': 'u\x91\xcf\xfa\x0c\xb9\x95\xe3t\xba2K\x7f\xfd\xca\xa3\x9f\x90\x88\xb8\xee\xa4\xd6\xe4',
-	'OIDC_CLIENT_SECRETS': 'client_secrets.json',
-	'OIDC_VALID_ISSUERS': ['http://172.17.0.5:8080/auth/realms/quantum_auth'],
+	'OIDC_CLIENT_SECRETS': '/usr/src/app/src/client_secrets.json',
+	'OIDC_VALID_ISSUERS': ['http://' + prefs['keycloak']['address'] + '/auth/realms/quantum_auth'],
 	'OIDC_RESOURCE_SERVER_ONLY': 'true'
 	})
 
@@ -61,7 +67,6 @@ AUTH_KEY_ID = 3
 KME_IDs = 4
 KEY_COUNT = 5
 DEF_KEY_SIZE = 6
-MAX_KEY_COUNT = 7
 MAX_KEY_PER_REQUEST = 8
 MAX_KEY_SIZE = 9
 MIN_KEY_SIZE = 10
@@ -77,6 +82,8 @@ ID = 0
 MODULE = 1
 PROTOCOL = 2
 MODULE_IP = 3
+MAX_KEY_COUNT = 4
+
 
 def isAuthenticated(token):
 	# check if user associated to this token is authorized to perform request
@@ -93,7 +100,7 @@ def isAuthenticated(token):
 def log(level, message):
 	# log only if requested level is enabled globally
 	if int(prefs['global']['log_level']) >= level:
-		db = mysql.connector.connect(host=str(prefs['internal_db']['host']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
+		db = mysql.connector.connect(host=str(prefs['internal_db']['host']), port=str(prefs['internal_db']['port']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
 		cursor = db.cursor()
 		timestamp = datetime.now()
 		cursor.execute("INSERT INTO log (level, message) VALUES ('%d', '%s')" % (level, message))
@@ -162,7 +169,7 @@ def getStatus(slave_SAE_ID):
 	#	return "Unauthorized", 401
 	log(INFO, "Current status requested by client " + g.oidc_token_info['client_id'])
 	slave_SAE_ID = str(slave_SAE_ID)
-	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
+	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), port=str(prefs['internal_db']['port']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
 	cursor = db.cursor()
 	# get KME connected to the given SAE
 	cursor.execute("SELECT KME_ID FROM destinations WHERE SAE_ID = '%s'" % slave_SAE_ID)
@@ -172,12 +179,18 @@ def getStatus(slave_SAE_ID):
 		cursor.execute("SELECT * FROM exchangedKeys")
 		kme_list = cursor.fetchall()
 		for kme in kme_list:
-			x = requests.get('https://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + slave_SAE_ID, verify='ca-crt.pem', cert=('client.crt', 'client.key'))
+			if USE_TLS:
+				x = requests.get('https://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + slave_SAE_ID, verify=verifyCert, cert=(clientCert, clientKey))
+			else:
+				x = requests.get('http://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + slave_SAE_ID)
 			if x.status_code == 401:
 				# try to authenticate
 				if doAuth(kme[KME_ID]) is True:
 					# try the request again
-					x = requests.get('https://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + slave_SAE_ID, verify='ca-crt.pem', cert=('client.crt', 'client.key'))
+					if USE_TLS:
+						x = requests.get('https://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + slave_SAE_ID, verify=verifyCert, cert=(clientCert, clientKey))
+					else:
+						x = requests.get('http://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + slave_SAE_ID)
 			if x.status_code == 200:
 				# update destinations
 				cursor.execute("INSERT INTO destinations (SAE_ID, KME_ID) VALUES ('%s', '%s')" % (slave_SAE_ID, kme[KME_ID]))
@@ -212,13 +225,13 @@ def getStatus(slave_SAE_ID):
 			return json.dumps(reply), 400
 
 		current_module = module[MODULE]
-		# parse MODULE to get a real python object
-		current_module = current_module[2:-1]	# remove b''
-		current_module = base64.b64decode(bytes(current_module, 'utf-8'))	# convert to byte and decode
-		current_module = pickle.loads(current_module)	# pickle to retrieve real python object
 		# get number of available keys
-		keysNo = current_module.AVAILABLE_KEYS(exchange[KEY_HANDLE])
-		
+		x = requests.post('http://' + current_module + '/available_keys', data=repr([exchange[KEY_HANDLE]]))
+		if x.status_code != 200:
+			keysNo = 0
+		else:
+			keysNo = int(eval(x.content)[0])
+
 		# stored key count
 		result['stored_key_count'] = keysNo
 		# source KME ID
@@ -226,9 +239,7 @@ def getStatus(slave_SAE_ID):
 		# target KME ID
 		result['target_KME_ID'] = tKME_ID
 		# master SAE ID
-		cursor.execute("SELECT SAE_ID FROM connectedSAE where SAE_IP = '%s'" % request.remote_addr)
-		mSAE_ID = cursor.fetchone()
-		result['master_SAE_ID'] = mSAE_ID[0]
+		result['master_SAE_ID'] = request.remote_addr
 		# slave SAE ID
 		result['slave_SAE_ID'] = slave_SAE_ID
 		# key size
@@ -236,7 +247,7 @@ def getStatus(slave_SAE_ID):
 		data = cursor.fetchone()
 		result['key_size'] = data[DEF_KEY_SIZE]
 		# max key count
-		result['max_key_count'] = data[MAX_KEY_COUNT]
+		result['max_key_count'] = module[MAX_KEY_COUNT]
 		# max key per request
 		# return the lowest value between this KME and the target one
 		if int(data[MAX_KEY_PER_REQUEST]) < int(prefs['settings']['MAX_KEY_PER_REQUEST']):
@@ -278,18 +289,11 @@ def getKey(slave_SAE_ID):
 	log(INFO, "Key requested by client " + g.oidc_token_info['client_id'])
 	slave_SAE_ID = str(slave_SAE_ID)
 	req_data = json.loads(request.data)
-	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
+	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), port=str(prefs['internal_db']['port']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
 	cursor = db.cursor()
 
 	# get master SAE ID
-	cursor.execute("SELECT SAE_ID FROM connectedSAE WHERE SAE_IP = '%s'" % str(request.remote_addr))
-	masterSAE_ID = cursor.fetchone()
-	if masterSAE_ID is None:
-		# error - this is not supposed to happen
-		log(ERROR, "Key request from client " + g.oidc_token_info['client_id'] + " failed because SAE_ID associated to this IP address was not found.")
-		reply = {"message" : "Server Error"}
-		return json.dumps(reply), 503
-	masterSAE_ID = masterSAE_ID[0]
+	masterSAE_ID = req_data['SAE_ID']
 
 	# get KME connected to the slave SAE
 	cursor.execute("SELECT KME_ID FROM destinations WHERE SAE_ID = '%s'" % slave_SAE_ID)
@@ -299,12 +303,18 @@ def getKey(slave_SAE_ID):
 		cursor.execute("SELECT * FROM exchangedKeys")
 		kme_list = cursor.fetchall()
 		for kme in kme_list:
-			x = requests.get('https://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + slave_SAE_ID, verify='ca-crt.pem', cert=('client.crt', 'client.key'))
+			if USE_TLS:
+				x = requests.get('https://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + slave_SAE_ID, verify=verifyCert, cert=(clientCert, clientKey))
+			else:
+				x = requests.get('http://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + slave_SAE_ID)
 			if x.status_code == 401:
 				# try to authenticate
 				if doAuth(kme[KME_ID]) is True:
 					# try the request again
-					x = requests.get('https://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + slave_SAE_ID, verify='ca-crt.pem', cert=('client.crt', 'client.key'))
+					if USE_TLS:
+						x = requests.get('https://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + slave_SAE_ID, verify=verifyCert, cert=(clientCert, clientKey))
+					else:
+						x = requests.get('http://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + slave_SAE_ID)
 			if x.status_code == 200:
 				# update destinations
 				cursor.execute("INSERT INTO destinations (SAE_ID, KME_ID) VALUES ('%s', '%s')" % (slave_SAE_ID, kme[KME_ID]))
@@ -409,14 +419,15 @@ def getKey(slave_SAE_ID):
 	# keys are exchanged in chunks of 128 bits (16 bytes), check the number of chunks requested to meet key length specification
 	requiredKeys = math.ceil(keysLen / 16)
 	current_module = module[MODULE]
-	# parse MODULE to get a real python object
-	current_module = current_module[2:-1]	# remove b''
-	current_module = base64.b64decode(bytes(current_module, 'utf-8'))	# convert to byte and decode
-	current_module = pickle.loads(current_module)	# pickle to retrieve real python object
 	kidlist = []
 	kcollection = []
 	# check that available keys are enough
-	availKeys = current_module.AVAILABLE_KEYS(exchange[KEY_HANDLE])
+	x = requests.post('http://' + current_module + '/available_keys', data=repr([exchange[KEY_HANDLE]]))
+	if x.status_code != 200:
+		availKeys = 0
+	else:
+		availKeys = int(eval(x.content)[0])
+	app.logger.info("result: %s - content: %s" % (str(availKeys), str(x.content))) # [cr] remove
 	if (keysNo*requiredKeys) > availKeys:
 		cursor.execute("UNLOCK TABLES")
 		# SAE is requesting more keys than available - reply with an error
@@ -427,11 +438,13 @@ def getKey(slave_SAE_ID):
 		index = 0
 		key = bytearray()
 		for i in range(requiredKeys):
-			chunk, midIndex, status = current_module.GET_KEY(exchange[KEY_HANDLE], -1, None, None, 0)
-			if status != SUCCESSFUL:
+			x = requests.post('http://' + current_module + '/get_key', data=repr([exchange[KEY_HANDLE], -1, None]))
+			if x.status_code != 200:
 				log(ERROR, "Key request from client " + g.oidc_token_info['client_id'] + " failed because no key is available.")
-				reply = {"message" : "Bad request format", "details" : [{"QKD error" : "no key is available - status: %d" % status}]}
+				reply = {"message" : "Bad request format", "details" : [{"QKD error" : "no key is available"}]}
 				return json.dumps(reply), 400
+			else:
+				chunk, midIndex, status = eval(x.content)
 			key = key + chunk
 			# save the first index
 			if i == 0:
@@ -447,13 +460,19 @@ def getKey(slave_SAE_ID):
 		kcollection.append({"key_ID" : keyID, "key" : key})
 	
 
-	# send same key_IDs to target KME to let it reserve to this SAE	
-	x = requests.post('https://' + str(tKME_data[KME_IP]) + ':' + str(tKME_data[KME_PORT]) + '/api/v1/kids/' + masterSAE_ID, data = json.dumps({'length': keysLen, "kidlist" : kidlist}), verify='ca-crt.pem', cert=('client.crt', 'client.key'))
+	# send same key_IDs to target KME to let it reserve to this SAE
+	if USE_TLS:	
+		x = requests.post('https://' + str(tKME_data[KME_IP]) + ':' + str(tKME_data[KME_PORT]) + '/api/v1/kids/' + masterSAE_ID, data = json.dumps({'length': keysLen, "kidlist" : kidlist, 'KME_ID' : str(prefs['settings']['KME_ID'])}), verify=verifyCert, cert=(clientCert, clientKey))
+	else:
+		x = requests.post('http://' + str(tKME_data[KME_IP]) + ':' + str(tKME_data[KME_PORT]) + '/api/v1/kids/' + masterSAE_ID, data = json.dumps({'length': keysLen, "kidlist" : kidlist, 'KME_ID' : str(prefs['settings']['KME_ID'])}))
 	if x.status_code == 401:
 		# try to authenticate
 		if doAuth(tKME_data[KME_ID]) is True:
 			# try the request again
-			x = requests.post('https://' + str(tKME_data[KME_IP]) + ':' + str(tKME_data[KME_PORT]) + '/api/v1/kids/' + masterSAE_ID, data = json.dumps({'length': keysLen, "kidlist" : kidlist}), verify='ca-crt.pem', cert=('client.crt', 'client.key'))
+			if USE_TLS:
+				x = requests.post('https://' + str(tKME_data[KME_IP]) + ':' + str(tKME_data[KME_PORT]) + '/api/v1/kids/' + masterSAE_ID, data = json.dumps({'length': keysLen, "kidlist" : kidlist, 'KME_ID' : str(prefs['settings']['KME_ID'])}), verify=verifyCert, cert=(clientCert, clientKey))
+			else:
+				x = requests.post('http://' + str(tKME_data[KME_IP]) + ':' + str(tKME_data[KME_PORT]) + '/api/v1/kids/' + masterSAE_ID, data = json.dumps({'length': keysLen, "kidlist" : kidlist, 'KME_ID' : str(prefs['settings']['KME_ID'])}))
 	if x.status_code != 200:
 		# error
 		log(ERROR, "Key request from client " + g.oidc_token_info['client_id'] + " failed because of an internal server error.")
@@ -478,7 +497,7 @@ def getKeyWithKeyIDs(master_SAE_ID):
 		log(ERROR, "Key with key ID request from client " + g.oidc_token_info['client_id'] + " failed because of a malformed request.")
 		reply = {"message" : "Request must contain a dictionary where 'key_IDs' is the key to access the array with requested key IDs."}
 		return json.dumps(reply), 400
-	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
+	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), port=str(prefs['internal_db']['port']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
 	cursor = db.cursor()
 
 	# get KME associated to this SAE
@@ -490,12 +509,18 @@ def getKeyWithKeyIDs(master_SAE_ID):
 			cursor.execute("SELECT * FROM exchangedKeys")
 			kme_list = cursor.fetchall()
 			for kme in kme_list:
-				x = requests.get('https://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + master_SAE_ID, verify='ca-crt.pem', cert=('client.crt', 'client.key'))
+				if USE_TLS:
+					x = requests.get('https://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + master_SAE_ID, verify=verifyCert, cert=(clientCert, clientKey))
+				else:
+					x = requests.get('http://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + master_SAE_ID)
 				if x.status_code == 401:
 					# try to authenticate
 					if doAuth(kme[KME_ID]) is True:
 						# try the request again
-						x = requests.get('https://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + master_SAE_ID, verify='ca-crt.pem', cert=('client.crt', 'client.key'))
+						if USE_TLS:
+							x = requests.get('https://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + master_SAE_ID, verify=verifyCert, cert=(clientCert, clientKey))
+						else:
+							x = requests.get('http://' + str(kme[KME_IP]) + ':' + str(kme[KME_PORT]) + '/api/v1/saes/' + master_SAE_ID)
 				if x.status_code == 200:
 					# update destinations
 					cursor.execute("INSERT INTO destinations (SAE_ID, KME_ID) VALUES ('%s', '%s')" % (master_SAE_ID, kme[KME_ID]))
@@ -629,7 +654,7 @@ def setPreference(preference):
 def getInfo(info):
 	#if not isAuthenticated(g.oidc_token_info):
 	#	return "Unauthorized", 401
-	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
+	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), port=str(prefs['internal_db']['port']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
 	cursor = db.cursor()
 	if info == "qkd_devices":
 		result = {}
@@ -742,7 +767,7 @@ def knownSAE(slave_SAE_ID):
 	# check if requested SAE is attached to us
 	slave_SAE_ID = str(slave_SAE_ID)
 	log(INFO, "Client " + str(request.remote_addr) + " asked if " + slave_SAE_ID + " is a known SAE for us")
-	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
+	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), port=str(prefs['internal_db']['port']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
 	cursor = db.cursor()
 	cursor.execute("SELECT * FROM connectedSAE WHERE SAE_ID = '%s'" % slave_SAE_ID)
 	result = cursor.fetchone()
@@ -765,19 +790,11 @@ def reserveKeys(master_SAE_ID):
 	req_data = json.loads(request.data)
 	klen = req_data['length']
 	kids = req_data['kidlist']
-	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
+	KMEid = req_data['KME_ID']
+	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), port=str(prefs['internal_db']['port']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
 	cursor = db.cursor()
 	# use a lock to access database to avoid concurrency access
 	try:
-		cursor.execute("SELECT * FROM exchangedKeys WHERE KME_IP = '%s'" % request.remote_addr)
-		tKME_data = cursor.fetchone()
-		if tKME_data is None:
-			# error - this is not supposed to happen
-			log(ERROR, "Keys reservation requested by " + master_SAE_ID + " failed because of an internal server error")
-			cursor.execute("UNLOCK TABLES")
-			return "No data found", 404
-		# check number of available keys
-		KMEid = tKME_data[KME_ID]
 		cursor.execute("SELECT * FROM KmeExchangerData WHERE KME_ID = '%s'" % KMEid)
 		result = cursor.fetchall()
 		if result is None or result == []:
@@ -799,11 +816,11 @@ def reserveKeys(master_SAE_ID):
 		# keys are exchanged in chunks of 128 bits (16 bytes), check the number of chunks requested to meet key length specification
 		requiredKeys = math.ceil(klen / 16)
 		current_module = module[MODULE]
-		# parse MODULE to get a real python object
-		current_module = current_module[2:-1]	# remove b''
-		current_module = base64.b64decode(bytes(current_module, 'utf-8'))	# convert to byte and decode
-		current_module = pickle.loads(current_module)	# pickle to retrieve real python object
-		availKeys = current_module.AVAILABLE_KEYS(exchange[KEY_HANDLE])
+		x = requests.post('http://' + current_module + '/available_keys', data=repr([exchange[KEY_HANDLE]]))
+		if x.status_code != 200:
+			availKeys = 0
+		else:
+			availKeys = int(eval(x.content)[0])
 		# check that enough keys are available
 		if (len(kids)*requiredKeys) > availKeys:
 			cursor.execute("UNLOCK TABLES")
@@ -820,10 +837,13 @@ def reserveKeys(master_SAE_ID):
 
 			key = bytearray()
 			for j in range(requiredKeys):
-				chunk, midIndex, status = current_module.GET_KEY(exchange[KEY_HANDLE], index, None, None, 0)
-				if status != SUCCESSFUL:
+				x = requests.post('http://' + current_module + '/get_key', data=repr([exchange[KEY_HANDLE], -1, None]))
+				if x.status_code != 200:
 					log(ERROR, "Key reservation requested by " + master_SAE_ID + " failed because key with streamID %s and index %s is not available." % (exchange[KEY_HANDLE], index))
 					return "key unavailable", 400
+				else:
+					chunk, midIndex, status = eval(x.content)
+	
 				key = key + chunk
 				index = index + 1
 
@@ -839,12 +859,12 @@ def reserveKeys(master_SAE_ID):
 			client.secrets.kv.v2.create_or_update_secret(path='storedkeys', secret=dict(keys=keys),)
 
 
-		cursor.execute("SELECT SAEKeys FROM reservedKeys WHERE KME_ID = '%s'" % tKME_data[KME_ID])
+		cursor.execute("SELECT SAEKeys FROM reservedKeys WHERE KME_ID = '%s'" % KMEid)
 		SAEKeys = cursor.fetchone()
 		if SAEKeys is None:
 			# insert key IDs with related SAE to reserve
 			cursor.execute("LOCK TABLES reservedKeys WRITE")
-			cursor.execute("INSERT INTO reservedKeys (KME_ID, SAEKeys) VALUES ('%s', '%s')" % (tKME_data[KME_ID], json.dumps({master_SAE_ID : kids})))
+			cursor.execute("INSERT INTO reservedKeys (KME_ID, SAEKeys) VALUES ('%s', '%s')" % (KMEid, json.dumps({master_SAE_ID : kids})))
 	
 			cursor.execute("UNLOCK TABLES")
 			return "OK", 200
@@ -861,11 +881,12 @@ def reserveKeys(master_SAE_ID):
 
 
 		# update key IDs with related SAE to reserve
-		cursor.execute("UPDATE reservedKeys SET SAEKeys = '%s' WHERE KME_ID = '%s'" % (json.dumps(reservedKeys), tKME_data[KME_ID]))
+		cursor.execute("UPDATE reservedKeys SET SAEKeys = '%s' WHERE KME_ID = '%s'" % (json.dumps(reservedKeys), KMEid))
 		cursor.execute("UNLOCK TABLES")
 		return "OK", 200
 
 	except Exception as e:
+		app.logger.info("Exception: %s" % str(e)) # [cr] remove
 		cursor.execute("UNLOCK TABLES")
 		log(ERROR, "Keys reservation requested by " + master_SAE_ID + " failed because of an internal server error")
 		return "Server error", 503
@@ -882,19 +903,14 @@ def openRequest():
 	key_handle = None
 	targetAddress = None
 	KID = data["key id"]
+	tKME_ID = data["KME_ID"]
 	if data.get("key handle") is not None:
 		key_handle = data["key handle"]
 	if data.get("module address") is not None:
 		targetAddress = data["module address"]
 	# retrieve KME_ID from which the request come from
-	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
+	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), port=str(prefs['internal_db']['port']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
 	cursor = db.cursor()
-	cursor.execute("SELECT KME_ID FROM exchangedKeys WHERE KME_IP = '%s'" % request.remote_addr)
-	tKME_ID = cursor.fetchone()
-	if tKME_ID is None:
-		# error - this should not happen
-		return "Not Found", 404
-	tKME_ID = tKME_ID[0]
 	# check if this is the first request
 	if targetAddress is not None:
 		# check if there's a qkd module available for this request
@@ -915,16 +931,8 @@ def openRequest():
 		cursor.execute("SELECT * FROM qkdmodules WHERE moduleID = '%s'" % moduleID)
 		module = cursor.fetchone()
 		current_module = module[MODULE]
-		# parse MODULE to get a real python object
-		current_module = current_module[2:-1]	# remove b''
-		current_module = base64.b64decode(bytes(current_module, 'utf-8'))	# convert to byte and decode
-		current_module = pickle.loads(current_module)	# pickle to retrieve real python object
 		qos = {'timeout' : prefs['global']['timeout'], 'length' : 128} # [cr] TODO: better management
-		key_handle, status = current_module.OPEN_CONNECT(None, result[TARGET_ADDRESS], qos, key_handle, 0)
-		if status == SUCCESSFUL:
-			app.logger.info("OPEN CONNECT SUCCESSFUL (ws)")
-		else:
-			app.logger.info("OPEN CONNECT FAILED (ws)")
+		x = requests.post('http://' + current_module + '/open_connect', data=repr([None, result[TARGET_ADDRESS], qos, key_handle]))
 		return "OK", 200
 
 
@@ -959,27 +967,23 @@ def syncRequest():
 # SOUTHBOUND Interface functions
 @app.route('/api/v1/keys/modules', methods=['POST'])
 def registerModule():
-	protocol = eval(request.data)
-	moduleAddress = str(request.remote_addr)
-	moduleID = str(uuid.uuid1())
-	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
+	req = eval(request.data)
+	protocol = req[0]
+	moduleAddress = req[1]
+	max_key_count = int(req[2])
+	
+	moduleID = str(uuid.uuid4())
+	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), port=str(prefs['internal_db']['port']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
 	cursor = db.cursor()
-	cursor.execute("INSERT INTO qkdmodules (moduleID, module, protocol) VALUES ('%s', '%s', '%s', '%s')" % (moduleID, moduleAddress, protocol, moduleAddress))
+	cursor.execute("INSERT INTO qkdmodules (moduleID, module, protocol, moduleIP, max_key_count) VALUES ('%s', '%s', '%s', '%s', %d)" % (moduleID, moduleAddress, protocol, moduleAddress, max_key_count))
 	return "OK"
-
-
-def QKD_REGISTER_MODULE(qkdModule, protocol, address):
-	moduleID = str(uuid.uuid1())
-	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
-	cursor = db.cursor()
-	cursor.execute("INSERT INTO qkdmodules (moduleID, module, protocol, moduleIP) VALUES ('%s', \"%s\", '%s', '%s')" % (moduleID, base64.b64encode(pickle.dumps(qkdModule)), protocol, address))
 
 
 # Utility functions
 def getQKDModule():
 	# look for an available QKDModule with required protocol
 	# required protocol can be found in preferences
-	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
+	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), port=str(prefs['internal_db']['port']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
 	cursor = db.cursor()
 	cursor.execute("SELECT * FROM qkdmodules")
 	modules = cursor.fetchall()
@@ -990,10 +994,6 @@ def getQKDModule():
 	m = None
 	for mod in modules:
 		m = mod[MODULE]
-		# parse MODULE to get a real python object
-		m = m[2:-1]	# remove b''
-		m = base64.b64decode(bytes(m, 'utf-8'))	# convert to byte and decode
-		m = pickle.loads(m)	# pickle to retrieve real python object
 		module_ID = mod[ID]
 		address = mod[MODULE_IP]
 		if local_modules.get(module_ID) is None:
@@ -1013,7 +1013,7 @@ def getQKDModule():
 
 
 def doAuth(kmeID):
-	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
+	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), port=str(prefs['internal_db']['port']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
 	cursor = db.cursor()
 	cursor.execute("SELECT * FROM exchangedKeys WHERE KME_ID = '%s'" % kmeID)
 	KME = cursor.fetchone()
@@ -1031,7 +1031,10 @@ def doAuth(kmeID):
 		#app.logger.info
 		key = bytes(keys[kid], 'utf-8')
 		# get the challenge message
-		x = requests.get('https://' + str(KME[KME_IP]) +  ':' + str(KME[KME_PORT]) + '/api/v1/challenges/kme', verify='ca-crt.pem', cert=('client.crt', 'client.key'))
+		if USE_TLS:
+			x = requests.get('https://' + str(KME[KME_IP]) +  ':' + str(KME[KME_PORT]) + '/api/v1/challenges/kme', verify=verifyCert, cert=(clientCert, clientKey))
+		else:
+			x = requests.get('http://' + str(KME[KME_IP]) +  ':' + str(KME[KME_PORT]) + '/api/v1/challenges/kme')
 		if x.status_code != 200:
 			return False
 		challenge = json.loads(x.content)
@@ -1039,63 +1042,15 @@ def doAuth(kmeID):
 		hmac = authenticate(key, challenge)
 		# serialize hmac for transmission
 		hmac = base64.b64encode(hmac)
-		x = requests.post('https://' + str(KME[KME_IP]) + ':' + str(KME[KME_PORT]) + '/api/v1/authenticate/kme', data = json.dumps({"key_id" : kid, "message" : challenge, "hmac" : str(hmac)}), verify='ca-crt.pem', cert=('client.crt', 'client.key'))
+		if USE_TLS:
+			x = requests.post('https://' + str(KME[KME_IP]) + ':' + str(KME[KME_PORT]) + '/api/v1/authenticate/kme', data = json.dumps({"key_id" : kid, "message" : challenge, "hmac" : str(hmac)}), verify=verifyCert, cert=(clientCert, clientKey))
+		else:
+			x = requests.post('http://' + str(KME[KME_IP]) + ':' + str(KME[KME_PORT]) + '/api/v1/authenticate/kme', data = json.dumps({"key_id" : kid, "message" : challenge, "hmac" : str(hmac)}))
 		if x.status_code == 200:
 			return True
 		return False
 	except Exception as e:
 		return False
-
-
-# QKD_GET_KEY is a blocking operation that may require a considerable amount of time.
-# This thread calls QKD_GET_KEY function on a specified module so that main thread can exchange keys by using other modules in the meantime
-class QKDExchange(Thread):
-	def __init__(self, module, module_ID, exchange):
-		self.current_module = module
-		self.lock = local_modules[module_ID]
-		self.exchange = exchange
-		Thread.__init__(self)
-
-	def run(self):
-		db = mysql.connector.connect(host=str(prefs['internal_db']['host']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
-		cursor = db.cursor()
-		# wait till we get lock
-		self.lock.acquire()
-		try:
-			# get latest exchange data
-			cursor.execute("SELECT * FROM KmeExchangerData WHERE key_ID = '%s'" % self.exchange[KEY_ID])
-			updatedExchange = cursor.fetchone()
-			if updatedExchange is None or updatedExchange[OPEN] == 3:
-				# key has already been exchanged in the meantime
-				# let this module available for others
-				self.lock.release()
-				return
-
-			# try to get the key
-			key, status = self.current_module.QKD_GET_KEY(self.exchange[KEY_HANDLE], None, 0)
-			if status != SUCCESSFUL:
-				# error - exit
-				self.lock.release()
-				return
-
-			# save key in vault
-			client = hvac.Client(url='http://' + prefs['vault']['host'] + ':' + str(prefs['vault']['port']))
-			client.token = prefs['vault']['token']
-			response = client.secrets.kv.read_secret_version(path='storedkeys')
-			keys = response['data']['data']['keys']
-			keys[self.exchange[KEY_ID]] = str(key)
-			client.secrets.kv.v2.create_or_update_secret(path='storedkeys', secret=dict(keys=keys),)
-
-			# update key status
-			cursor.execute("UPDATE KmeExchangerData SET open = 3 WHERE key_ID = '%s'" % self.exchange[KEY_ID])
-			
-			self.current_module.QKD_CLOSE(self.exchange[KEY_HANDLE], status)
-			# let this module available for others
-			self.lock.release()
-		except Exception as e:
-			# release lock in case of error
-			if self.lock.locked():
-				self.lock.release()
 
 
 # QKD Implementation: This class actually perform QKD operations
@@ -1105,7 +1060,7 @@ class KeyExchanger(Thread):
 
 
 	def run(self):
-		db = mysql.connector.connect(host=str(prefs['internal_db']['host']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
+		db = mysql.connector.connect(host=str(prefs['internal_db']['host']), port=str(prefs['internal_db']['port']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
 		cursor = db.cursor()
 
 		while True:
@@ -1136,29 +1091,45 @@ class KeyExchanger(Thread):
 
 						KID = str(uuid.uuid4())
 						# send KEY_ID and QKD module address to target KME
-						x = requests.post('https://' + str(KME[KME_IP]) + ':' + str(KME[KME_PORT]) + '/api/v1/keys/', data = json.dumps({"key id" : KID, "module address" : module_address}), verify='ca-crt.pem', cert=('client.crt', 'client.key'))
+						if USE_TLS:
+							x = requests.post('https://' + str(KME[KME_IP]) + ':' + str(KME[KME_PORT]) + '/api/v1/keys/', data = json.dumps({"key id" : KID, "module address" : module_address, "KME_ID" : prefs['settings']['KME_ID']}), verify=verifyCert, cert=(clientCert, clientKey))
+						else:
+							x = requests.post('http://' + str(KME[KME_IP]) + ':' + str(KME[KME_PORT]) + '/api/v1/keys/', data = json.dumps({"key id" : KID, "module address" : module_address, "KME_ID" : prefs['settings']['KME_ID']}))
 						if x.status_code == 401:
 							# try to authenticate
 							if doAuth(KME[KME_ID]) is True:
 								# try the request again
-								x = requests.post('https://' + str(KME[KME_IP]) + ':' + str(KME[KME_PORT]) + '/api/v1/keys/', data = json.dumps({"key id" : KID, "module address" : module_address}), verify='ca-crt.pem', cert=('client.crt', 'client.key'))
+								if USE_TLS:
+									x = requests.post('https://' + str(KME[KME_IP]) + ':' + str(KME[KME_PORT]) + '/api/v1/keys/', data = json.dumps({"key id" : KID, "module address" : module_address, "KME_ID" : prefs['settings']['KME_ID']}), verify=verifyCert, cert=(clientCert, clientKey))
+								else:
+									x = requests.post('http://' + str(KME[KME_IP]) + ':' + str(KME[KME_PORT]) + '/api/v1/keys/', data = json.dumps({"key id" : KID, "module address" : module_address, "KME_ID" : prefs['settings']['KME_ID']}))
 						if x.status_code == 200:
 							# get IP address of target QKD module
 							moduleAddress = bytes.decode(x.content, 'utf-8').rstrip()
 							qos = {'timeout' : prefs['global']['timeout'], 'length' : KME[MAX_KEY_SIZE]}
-							key_handle, status = current_module.OPEN_CONNECT(None, moduleAddress, qos, None, 0)
+							x = requests.post('http://' + current_module + '/open_connect', data=repr([None, moduleAddress, qos, None]))
 							# let this module available for others
 							lock.release()
-							if status != SUCCESSFUL:
+							if x.status_code != 200:
 								# error - move forward
 								continue
+							response = eval(x.content)
+							key_handle = response[0]
+							status = response[1]
+							
 							# send key_handle to target KME
-							x = requests.post('https://' + str(KME[KME_IP]) + ':' + str(KME[KME_PORT]) + '/api/v1/keys/', data = json.dumps({"key handle" : key_handle, "key id" : KID}), verify='ca-crt.pem', cert=('client.crt', 'client.key'))
+							if USE_TLS:
+								x = requests.post('https://' + str(KME[KME_IP]) + ':' + str(KME[KME_PORT]) + '/api/v1/keys/', data = json.dumps({"key handle" : key_handle, "key id" : KID, "KME_ID" : prefs['settings']['KME_ID']}), verify=verifyCert, cert=(clientCert, clientKey))
+							else:
+								x = requests.post('http://' + str(KME[KME_IP]) + ':' + str(KME[KME_PORT]) + '/api/v1/keys/', data = json.dumps({"key handle" : key_handle, "key id" : KID, "KME_ID" : prefs['settings']['KME_ID']}))
 							if x.status_code == 401:
 								# try to authenticate
 								if doAuth(KME[KME_ID]) is True:
 									# try the request again
-									x = requests.post('https://' + str(KME[KME_IP]) + ':' + str(KME[KME_PORT]) + '/api/v1/keys/', data = json.dumps({"key handle" : key_handle, "key id" : KID}), verify='ca-crt.pem', cert=('client.crt', 'client.key'))
+									if USE_TLS:
+										x = requests.post('https://' + str(KME[KME_IP]) + ':' + str(KME[KME_PORT]) + '/api/v1/keys/', data = json.dumps({"key handle" : key_handle, "key id" : KID, "KME_ID" : prefs['settings']['KME_ID']}), verify=verifyCert, cert=(clientCert, clientKey))
+									else:
+										x = requests.post('http://' + str(KME[KME_IP]) + ':' + str(KME[KME_PORT]) + '/api/v1/keys/', data = json.dumps({"key handle" : key_handle, "key id" : KID, "KME_ID" : prefs['settings']['KME_ID']}))
 							if x.status_code == 200:
 								# target KME registered key handle and ID, register them on this side too
 								cursor.execute("INSERT INTO KmeExchangerData (KME_ID, key_handle, key_ID, open, module_ID, module_address) VALUES ('%s', '%s', '%s', 1, '%s', '%s')" % (KME[KME_ID], key_handle, KID, module_ID, moduleAddress))
@@ -1166,6 +1137,7 @@ class KeyExchanger(Thread):
 						continue
 
 			except Exception as e:
+				app.logger.info("Exception: %s" % str(e)) # [cr] remove
 				try:
 					if lock.locked():
 						lock.release()
@@ -1211,11 +1183,14 @@ def main():
 	fh.setFormatter(formatter)
 	app.logger.addHandler(fh)
 	app.logger.setLevel(logging.DEBUG)
-	context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-	context.verify_mode = ssl.CERT_OPTIONAL
-	context.load_verify_locations('ca-crt.pem')
-	context.load_cert_chain('config/server.crt', 'config/server.key')
-	app.run(host='0.0.0.0', port=serverPort, ssl_context=context)
+	if USE_TLS:
+		context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+		context.verify_mode = ssl.CERT_OPTIONAL
+		context.load_verify_locations(verifyCert)
+		context.load_cert_chain(serverCert, serverKey)
+		app.run(host='0.0.0.0', port=serverPort, ssl_context=context)
+	else:
+		app.run(host='0.0.0.0', port=serverPort)
 	ke.join()
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ docker-compose up
 - post request to get the token. Example:
 POST http://172.16.0.5:8080/auth/realms/quantum_auth/protocol/openid-connect/token
 	HEADERS: Content-Type: application/x-www-form-urlencoded
-	BODY: client_id=App1&client_secret=f9798a04-617b-4566-9ff3-d5a5377ae4ad&grant_type=client_credentials
+	BODY: client_id=App1&client_secret=b9612684-f651-4a15-b967-0ff598ab85a9&grant_type=client_credentials
 
 
 ## API
