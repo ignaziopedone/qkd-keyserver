@@ -1,0 +1,5 @@
+[submodule "volumes/qkdmodule"]
+	path = volumes/qkdmodule
+	url = https://github.com/ignaziopedone/qkd-module
+	branch = master
+	update = rebase

@@ -427,7 +427,6 @@ def getKey(slave_SAE_ID):
 		availKeys = 0
 	else:
 		availKeys = int(eval(x.content)[0])
-	app.logger.info("result: %s - content: %s" % (str(availKeys), str(x.content))) # [cr] remove
 	if (keysNo*requiredKeys) > availKeys:
 		cursor.execute("UNLOCK TABLES")
 		# SAE is requesting more keys than available - reply with an error
@@ -886,7 +885,6 @@ def reserveKeys(master_SAE_ID):
 		return "OK", 200
 
 	except Exception as e:
-		app.logger.info("Exception: %s" % str(e)) # [cr] remove
 		cursor.execute("UNLOCK TABLES")
 		log(ERROR, "Keys reservation requested by " + master_SAE_ID + " failed because of an internal server error")
 		return "Server error", 503
@@ -971,12 +969,12 @@ def registerModule():
 	protocol = req[0]
 	moduleAddress = req[1]
 	max_key_count = int(req[2])
-	
+
 	moduleID = str(uuid.uuid4())
 	db = mysql.connector.connect(host=str(prefs['internal_db']['host']), port=str(prefs['internal_db']['port']), user=str(prefs['internal_db']['user']), passwd=str(prefs['internal_db']['passwd']), database=str(prefs['internal_db']['database']), autocommit=True)
 	cursor = db.cursor()
 	cursor.execute("INSERT INTO qkdmodules (moduleID, module, protocol, moduleIP, max_key_count) VALUES ('%s', '%s', '%s', '%s', %d)" % (moduleID, moduleAddress, protocol, moduleAddress, max_key_count))
-	return "OK"
+	return repr([str(prefs['internal_db']['host']), str(prefs['internal_db']['port']), str(prefs['internal_db']['user']), str(prefs['internal_db']['passwd']), str(prefs['internal_db']['database']), str(prefs['vault']['host']), str(prefs['vault']['port']), str(prefs['vault']['token'])])
 
 
 # Utility functions
@@ -1137,7 +1135,6 @@ class KeyExchanger(Thread):
 						continue
 
 			except Exception as e:
-				app.logger.info("Exception: %s" % str(e)) # [cr] remove
 				try:
 					if lock.locked():
 						lock.release()

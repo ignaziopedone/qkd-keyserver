@@ -13,7 +13,6 @@ services:
     networks:
       frontend:
         ipv4_address: 172.16.0.2
-    #network_mode: host
     container_name: database
     ports:
       - "3307:3306"
@@ -25,7 +24,7 @@ services:
       MYSQL_ROOT_PASSWORD: dummypassword
       MYSQL_DATABASE: simulatorDB
 
-  vault1:
+  vault:
     image: vault
     container_name: alice-vault
     ports:
@@ -33,7 +32,6 @@ services:
     networks:
       frontend:
         ipv4_address: 172.16.0.3
-    #network_mode: host
     restart: "on-failure"
     volumes:
       - ./volumes/alice-vault/logs:/vault/logs
@@ -55,11 +53,10 @@ services:
     networks:
       frontend:
         ipv4_address: 172.16.0.5
-    #network_mode: host
     restart: "on-failure"
 
 
-  alice:
+  keyserver:
     image: ignaziopedone/qkd:keyserver-1.2
     container_name: alice-server
     ports:
@@ -67,11 +64,23 @@ services:
     networks:
       frontend:
         ipv4_address: 172.16.0.6
-    #network_mode: host
     restart: "on-failure"
     volumes:
       - ./volumes/alice:/usr/src/app/config
       - ./volumes/source:/usr/src/app/src
     depends_on:
-      - vault1
+      - vault
       - mysql
+
+  qkdmodule:
+    image: ignaziopedone/qkd:keyserver-1.2
+    container_name: alice-module
+    ports:
+      - 5000:5000
+      - 5001:5001
+    networks:
+      frontend:
+        ipv4_address: 172.16.0.7
+    restart: "on-failure"
+    volumes:
+      - ./volumes/qkdmodule:/usr/src/app/src
