@@ -88,12 +88,19 @@ docker-compose up
 ```
 
 ## API
-The first three methods here stated, belongs to [ETSI GS QKD 014](https://www.etsi.org/deliver/etsi_gs/QKD/001_099/014/01.01.01_60/gs_QKD014v010101p.pdf) standard (v1.1.1). Refer to this standard for detailed information about the parameters these function accept and return.
+The first three methods here stated, belong to [ETSI GS QKD 014](https://www.etsi.org/deliver/etsi_gs/QKD/001_099/014/01.01.01_60/gs_QKD014v010101p.pdf) standard (v1.1.1). Refer to this standard for detailed information about the parameters these function accept and return.
+
+Note. All the replies to these methods are in JSON.
 
 ```sh
 GET https://keyServerIP/api/v1/keys/<slave_SAE_ID>/status
 ```
-This method returns information about the number of available keys with the specified slave_SAE_ID
+This method returns information about the number of available keys with the specified slave_SAE_ID.
+
+If the method returns the status code `200` the request went fine and all the information are available in the returned JSON object. If an error occurs the possible replies are:
+- 400: Bad request. Server can reply this code if a request has an error (e.g. the destination SAE is not known in the network or no QKD link is established between the two Key Servers). Check the returned JSON object for details.
+- 401: Unauthorized. This reply is issued if Keycloak token provided is invalid.
+- 503: Generic server error.
 
 ```sh
 POST https://keyServerIP/api/v1/keys/<slave_SAE_ID>/enc_keys
@@ -102,6 +109,11 @@ This method retrieve one or more key that only the specified slave_SAE_ID can re
 ```sh
 {'number' : number, 'size' : klen}
 ```
+If the method returns the status code `200` the request went fine and all the information are available in the returned JSON object. If an error occurs the possible replies are:
+- 400: Bad request. Server can reply this code if a request has an error (e.g. the destination SAE is not known in the network, no QKD link is established between the two Key Servers, the number of requested keys is greather than maximum keys per request parameter selected in preferences, mandatory extensions or additional slave SAE are requested or more keys than available are requested). Check the returned JSON object for details.
+- 401: Unauthorized. This reply is issued if Keycloak token provided is invalid.
+- 503: Generic server error.
+
 
 ```sh
 POST https://keyServerIP/api/v1/keys/<master_SAE_ID>/dec_keys
@@ -111,22 +123,37 @@ Key IDs can be specified in body content with the following json object:
 ```sh
 {'key_IDs' : [{'key_ID' : kid1}, {'key_ID' : kid2}, {'key_ID' : kid3}, ...]}
 ```
+If the method returns the status code `200` the request went fine and all the information are available in the returned JSON object. If an error occurs the possible replies are:
+- 400: Bad request. Server can reply this code if a request has an error (e.g. the destination SAE is not known in the network, key IDs are not specified in the format explained above or requested key IDs have not been reserved for the requesting SAE). Check the returned JSON object for details.
+- 401: Unauthorized. This reply is issued if Keycloak token provided is invalid.
+- 503: Generic server error.
 
 
 ```sh
 GET https://keyServerIP/api/v1/preferences
 ```
 This method returns the current settings in the server
+If the method returns the status code `200` the request went fine and all the information are available in the returned JSON object. If an error occurs the possible replies are:
+- 401: Unauthorized. This reply is issued if Keycloak token provided is invalid.
+- 503: Generic server error.
 
 ```sh
 POST https://keyServerIP/api/v1/keys/preferences/<preference>
 ```
 This method can be used to change one of the settings in the server. Possible values for <preference> parameter are: `timeout`, `log_level` and `qkd_protocol`.
+If the method returns the status code `200` the request went fine and the related preference is updated. If an error occurs the possible replies are:
+- 400: Bad request. Server can reply this code if a request has an error (e.g. the parameters in the request are not allowed). Check the returned JSON object for details.
+- 401: Unauthorized. This reply is issued if Keycloak token provided is invalid.
+- 503: Generic server error.
 
 ```sh
 POST https://keyServerIP/api/v1/keys/information/<info>
 ```
 This method is used to retrieve information about the internal status of the server. Possible values for <info> parameter are: `qkd_devices` and `log`.
+If the method returns the status code `200` the request went fine and all the information are available in the returned JSON object. If an error occurs the possible replies are:
+- 400: Bad request. Server can reply this code if a request has an error (e.g. the parameters in the request are not allowed). Check the returned JSON object for details.
+- 401: Unauthorized. This reply is issued if Keycloak token provided is invalid.
+- 503: Generic server error.
 
 ## Key Server usage
 Once started, you can start using QKD Key Server. Before requiring keys with SAEs, you still need to perform a further step: QKD Module registration.
