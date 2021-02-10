@@ -4,7 +4,7 @@ This repository contains the code to run the full stack QKD implementation, comp
 ```sh
 docker-compose up
 ```
-However, before starting to use this code, some configuration needs to be done. Configuration regards the services needed to execute the code, e.g. `keycloak` (see [additional services](#additional services) section) as well as specific settings in configuration file which must be selected before starting the execution (see [prerequisites](#prerequisites) section).
+However, before starting to use this code, some configuration needs to be done. Configuration regards the services needed to execute the code, e.g. `keycloak` (see [additional services](#additional-services) section) as well as specific settings in configuration file which must be selected before starting the execution (see [prerequisites](#prerequisites) section).
 
 
 ## additional services
@@ -17,7 +17,7 @@ When a QKD Key Server runs, it must know the high level application (`SAE`) allo
 
 To add data related to registered SAE, modify `connectedSAE` table by adding the desired data at row 92 of `db_init` file. Here is already present an entry of a SAE with the related IP address. Actually IP address field is not currently used, hence it can be left unchanged. The first field is the ID of the registered SAE, it can be modified as desired and more entry can be added if required. Note that this ID will identify the SAE in the whole network, hence, if another SAE wants to exchange a key with the just registered one, it must provide the SAE ID you specify in this field.
 
-For more information on how data are organized in the database, see [data model](#Data model) section.
+For more information on how data are organized in the database, see [data model](#Data-model) section.
 
 - Vault.
 
@@ -66,7 +66,7 @@ Register as much clients as you need by repeating the above steps. You can alway
 
 ## prerequisites
 
-This section refers to the configurations that need to be performed in configuration files before the execution of the QKD Key Server. This step should be performed after the [additional services](#additional services) have been configured, hence you probably need to start docker containers with `docker-compose up` command once in order to set up the services, then stop all the containers and make the following configurations before launching again the whole execution with `docker-compose`.
+This section refers to the configurations that need to be performed in configuration files before the execution of the QKD Key Server. This step should be performed after the [additional services](#additional-services) have been configured, hence you probably need to start docker containers with `docker-compose up` command once in order to set up the services, then stop all the containers and make the following configurations before launching again the whole execution with `docker-compose`.
 
 The first file that needs attention is `config.yaml` file in `volumes/alice` directory of this repository. `internal_db`, `vault` and `keycloak` section must be configured with the correct data, depending by your configuration. Note that if you didn't reconfigure vault services, token and unseal keys are already set to the right value, otherwise you need to set the values obtained from your configuration. `settings` section regards the specific settings required by the standard for this key server: here it is possible to specify the maximum number of keys per request the server can return to a SAE, the server ID (`KME_ID`) and other parameters. `global` section refers to generic parameters in the server. In this section it is possible to specify:
 - `qkd_protocol`: it is the preferred QKD protocol the lower level layers (QKD Module) should use. However it is not sure that the attached QKD Modules can implement this protocol, in this case the first available QKD Module will be used despite its protocol.
@@ -80,7 +80,7 @@ Once config file has been configured, it is needed to configure two more files b
 ```
 http://<Keycloak IP address and port>/auth/realms/<Realm name>/protocol/openid-connect/auth
 ```
-- `client_id` and `client_secret` should match the ones retrieved during the registration phase of the client. They can be found in `credential` tab from the keycloak console. Please refer to [additional services](#additional services) section for more information.
+- `client_id` and `client_secret` should match the ones retrieved during the registration phase of the client. They can be found in `credential` tab from the keycloak console. Please refer to [additional services](#additional-services) section for more information.
 
 After these configurations are completed, Key Server can be started with the command:
 ```
@@ -169,7 +169,7 @@ Note that Key Server IP is a string.
 
 Once all the involved Key Servers have a module registered on it, they start to exchanging keys and keys can now be retrieved from SAEs.
 
-SAE must possess an authentication token in order to talk to Key Server. Authentication token must be retrieved from Keycloak service. It is therefore mandatory to register a client on Keycloak for any SAE willing to reach the Key Server and use the clientID and secret that comes out the registration phase to request a token. See [additional services](#additional services) section for information about how to register a client in Keycloak.
+SAE must possess an authentication token in order to talk to Key Server. Authentication token must be retrieved from Keycloak service. It is therefore mandatory to register a client on Keycloak for any SAE willing to reach the Key Server and use the clientID and secret that comes out the registration phase to request a token. See [additional services](#additional-services) section for information about how to register a client in Keycloak.
 
 After the client has been registered, a token can be retrieved with a POST request to Keycloak service. An example of request in python is the following:
 ```
@@ -231,3 +231,5 @@ The implementation in this repository is a working version of a QKD Key Server. 
 - Right now, any client can access to all the REST API described before. However it can be useful to split the API in two different sets. The standard ones (`status`, `enc_keys` and `dec_keys`) can be accessed by any kind of client. The other API should instead be accessed by some _administration_ clients that can use those methods to modify server settings. In this way server settings access is restricted only to certain kind of clients.
 
 - Right now, as soon as a QKD Module is attached, the server try starting a key stream exchange by calling OPEN_CONNECT method with all the valid destinations it found in its list. In a real scenario, a QKD link must be manually set up between two destinations, hence it is better to remove the automatic start of the key exchange and define an API to manually start the exchange.
+
+- Right now, the list of QKD Key Servers available in the network must be manually update in the DB itself (by editing `exchangedKeys` table in `db_init.sql` file). An API can be proposed to register new QKD Key Servers in the network in order to simplify this procedure.
