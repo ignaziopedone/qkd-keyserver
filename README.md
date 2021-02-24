@@ -1,5 +1,22 @@
 # qkd-keyserver
 
+
+## Quick start
+In order to start key server implementation the following operation needs to be performed:
+- Configure database by editing `db_init.sql` file. Here you need to:
+	- Edit `exchangedKeys` table by adding a target KME with an ID, IP address and port specified in the first three field of the entry (it is possible to see an example entry in the file)
+	- Edit `connectedSAE` table by adding a SAE that will be allowed to make requests to this server. It is possible to see an example entry in the file. Note that even if IP address is a field of this table, it is NOT used by the code, hence it doesn't need to match a specific address.
+- Edit Key Server configuration by modifying `volumes/alice/config.yaml` file. Here it is needed to specify the correct IP address for the external services (more details on this file can be found in below sections).
+- Edit QKD Module configuration by modifying `volumes/qkdmodule/configM.yaml` file. Here it is needed to specify the correct IP public address of the module itself in the field `this_public_IP`, besides `sender` field must be kept `1` in a key server instance and modified to `0` in the peer instance (if both of the modules have `1` or `0`, the two modules will not be able to exchange keys since one must be sender and another one must be receiver. See) [QKD Module](https://github.com/ignaziopedone/qkd-module#configuration) repository for more details).
+- Start the containers by running `docker-compose up` command.
+- Configure Keycloak by adding a Realm and the at leas one client (see [additional services](#additional-services) for detailed instruction).
+- Update `volumes/source/client_secrets.json` file by adding keycloak configuration: `client_id` and `client_secret` must match one of the registered clients.
+- Restart the containers (make sure to stop and start the containers, do not delete keycloak container or the configuration will be lost).
+- Attach the QKD Module to the Key Server (`register.py` file can be used for this purpose, just make sure to replace the correct server address in the body of the request before launching the python script).
+- Optionally, you can launch `SAEtest.py` script to simulate a SAE and check that everything is running fine (make sure to edit `thisSAEID` and `keyServerIP` accordingly to your configuration and modify the request body of the first instruction in main to add a client_id and a client_secret that matches one client registered in Keycloak.
+
+
+## Detailed description
 This repository contains the code to run the full stack QKD implementation, composed by QKD Simulator, QKD Module and QKD Key Server. In order to simplify the code execution, a docker-compose file has been build. This allows to set up the whole environment with by using only the following command:
 ```sh
 docker-compose up

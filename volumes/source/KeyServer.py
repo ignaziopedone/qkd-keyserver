@@ -760,8 +760,8 @@ def authenticateKme():
 @app.route('/api/v1/saes/<slave_SAE_ID>', methods=['GET'])
 def knownSAE(slave_SAE_ID):
 	req = {'client_id': str(request.remote_addr), 'session_state' : 0} 
-	if not isAuthenticated(req):
-		return "Unauthorized", 401
+	#if not isAuthenticated(req):
+	#	return "Unauthorized", 401
 
 	# check if requested SAE is attached to us
 	slave_SAE_ID = str(slave_SAE_ID)
@@ -781,8 +781,8 @@ def knownSAE(slave_SAE_ID):
 @app.route('/api/v1/kids/<master_SAE_ID>', methods=['POST'])
 def reserveKeys(master_SAE_ID):
 	req = {'client_id': str(request.remote_addr), 'session_state' : 0} 
-	if not isAuthenticated(req):
-		return "Unauthorized", 401
+	#if not isAuthenticated(req):
+	#	return "Unauthorized", 401
 	master_SAE_ID = str(master_SAE_ID)
 
 	log(INFO, "Keys reservation requested by " + master_SAE_ID)
@@ -893,8 +893,8 @@ def reserveKeys(master_SAE_ID):
 @app.route('/api/v1/keys/', methods=['POST'])
 def openRequest():
 	req = {'client_id': str(request.remote_addr), 'session_state' : 0} 
-	if not isAuthenticated(req):
-		return "Unauthorized", 401
+	#if not isAuthenticated(req):
+	#	return "Unauthorized", 401
 
 	log(INFO, "Client " + str(request.remote_addr) + " transmitted us key handle and ID for QKD_Open function")
 	data = json.loads(request.data)
@@ -937,8 +937,8 @@ def openRequest():
 @app.route('/api/v1/keys/key', methods=['POST'])
 def syncRequest():
 	req = {'client_id': str(request.remote_addr), 'session_state' : 0} 
-	if not isAuthenticated(req):
-		return "Unauthorized", 401
+	#if not isAuthenticated(req):
+	#	return "Unauthorized", 401
 
 	try:
 		# get key id

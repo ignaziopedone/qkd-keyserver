@@ -10,7 +10,8 @@ keyServerIP = '10.0.2.15:4000'
 
 def main():
 	try:
-		token = sys.argv[1]
+		x = requests.post('http://172.16.0.5:8080/auth/realms/quantum_auth/protocol/openid-connect/token', data='client_id=SAE2&client_secret=d2f56afc-3b36-4ed2-a81e-2914f9ce679&grant_type=client_credentials', headers={'Content-Type':'application/x-www-form-urlencoded'})
+		token = x.json()['access_token']
 	except:
 		print("CRITICAL ERROR: access token must be provided in order to talk to key server")
 		sys.exit(2)

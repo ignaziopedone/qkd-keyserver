@@ -186,7 +186,7 @@ CREATE TABLE `exchangedKeys` (
 
 LOCK TABLES `exchangedKeys` WRITE;
 /*!40000 ALTER TABLE `exchangedKeys` DISABLE KEYS */;
-INSERT INTO `exchangedKeys` VALUES ('KME55667788','10.0.2.15',6000,'68e3f6d0-d273-11ea-aada-ffeca5cd1502',NULL,0,128,500,3,128,8,0);
+INSERT INTO `exchangedKeys` VALUES ('KME55667788','10.0.2.15',4000,'68e3f6d0-d273-11ea-aada-ffeca5cd1502',NULL,0,128,500,3,128,8,0);
 /*!40000 ALTER TABLE `exchangedKeys` ENABLE KEYS */;
 UNLOCK TABLES;
 
