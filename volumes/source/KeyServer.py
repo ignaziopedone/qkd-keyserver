@@ -226,7 +226,7 @@ def getStatus(slave_SAE_ID):
 
 		current_module = module[MODULE]
 		# get number of available keys
-		x = requests.post('http://' + current_module + '/available_keys', data=repr([exchange[KEY_HANDLE]]))
+		x = requests.get('http://' + current_module + '/api/v1/qkdm/available_keys?handle=' + repr([exchange[KEY_HANDLE]]))
 		if x.status_code != 200:
 			keysNo = 0
 		else:
@@ -422,7 +422,7 @@ def getKey(slave_SAE_ID):
 	kidlist = []
 	kcollection = []
 	# check that available keys are enough
-	x = requests.post('http://' + current_module + '/available_keys', data=repr([exchange[KEY_HANDLE]]))
+	x = requests.get('http://' + current_module + '/api/v1/qkdm/available_keys?handle=' + repr([exchange[KEY_HANDLE]]))
 	if x.status_code != 200:
 		availKeys = 0
 	else:
@@ -437,7 +437,7 @@ def getKey(slave_SAE_ID):
 		index = 0
 		key = bytearray()
 		for i in range(requiredKeys):
-			x = requests.post('http://' + current_module + '/get_key', data=repr([exchange[KEY_HANDLE], -1, None]))
+			x = requests.post('http://' + current_module + '/api/v1/qkdm/actions/get_key', data=repr([exchange[KEY_HANDLE], -1, None]))
 			if x.status_code != 200:
 				log(ERROR, "Key request from client " + g.oidc_token_info['client_id'] + " failed because no key is available.")
 				reply = {"message" : "Bad request format", "details" : [{"QKD error" : "no key is available"}]}
@@ -615,7 +615,7 @@ def getPreferences():
 			result[pref] = prefs['global'][pref]
 	return json.dumps(result)
 
-@app.route('/api/v1/keys/preferences/<preference>', methods=['POST'])
+@app.route('/api/v1/preferences/<preference>', methods=['PUT'])
 @oidc.accept_token(True)
 def setPreference(preference):
 	#if not isAuthenticated(g.oidc_token_info):
@@ -648,7 +648,7 @@ def setPreference(preference):
 		return json.dumps(reply), 503
 
 
-@app.route('/api/v1/keys/information/<info>', methods=['GET'])
+@app.route('/api/v1/information/<info>', methods=['GET'])
 @oidc.accept_token(True)
 def getInfo(info):
 	#if not isAuthenticated(g.oidc_token_info):
@@ -815,7 +815,7 @@ def reserveKeys(master_SAE_ID):
 		# keys are exchanged in chunks of 128 bits (16 bytes), check the number of chunks requested to meet key length specification
 		requiredKeys = math.ceil(klen / 16)
 		current_module = module[MODULE]
-		x = requests.post('http://' + current_module + '/available_keys', data=repr([exchange[KEY_HANDLE]]))
+		x = requests.get('http://' + current_module + '/api/v1/qkdm/available_keys?handle=' + repr([exchange[KEY_HANDLE]]))
 		if x.status_code != 200:
 			availKeys = 0
 		else:
@@ -836,7 +836,7 @@ def reserveKeys(master_SAE_ID):
 
 			key = bytearray()
 			for j in range(requiredKeys):
-				x = requests.post('http://' + current_module + '/get_key', data=repr([exchange[KEY_HANDLE], -1, None]))
+				x = requests.post('http://' + current_module + '/api/v1/qkdm/actions/get_key', data=repr([exchange[KEY_HANDLE], -1, None]))
 				if x.status_code != 200:
 					log(ERROR, "Key reservation requested by " + master_SAE_ID + " failed because key with streamID %s and index %s is not available." % (exchange[KEY_HANDLE], index))
 					return "key unavailable", 400
@@ -930,7 +930,7 @@ def openRequest():
 		module = cursor.fetchone()
 		current_module = module[MODULE]
 		qos = {'timeout' : prefs['global']['timeout'], 'length' : 128} # [cr] TODO: better management
-		x = requests.post('http://' + current_module + '/open_connect', data=repr([None, result[TARGET_ADDRESS], qos, key_handle]))
+		x = requests.post('http://' + current_module + '/api/v1/qkdm/actions/open_connect', data=repr([None, result[TARGET_ADDRESS], qos, key_handle]))
 		return "OK", 200
 
 
@@ -1105,7 +1105,7 @@ class KeyExchanger(Thread):
 							# get IP address of target QKD module
 							moduleAddress = bytes.decode(x.content, 'utf-8').rstrip()
 							qos = {'timeout' : prefs['global']['timeout'], 'length' : KME[MAX_KEY_SIZE]}
-							x = requests.post('http://' + current_module + '/open_connect', data=repr([None, moduleAddress, qos, None]))
+							x = requests.post('http://' + current_module + '/api/v1/qkdm/actions/open_connect', data=repr([None, moduleAddress, qos, None]))
 							# let this module available for others
 							lock.release()
 							if x.status_code != 200:

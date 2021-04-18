@@ -105,7 +105,7 @@ def main():
 			else:
 				value = input("Insert preferred QKD protocol:\n")
 				preference = 'qkd_protocol'
-			x = requests.post('http://' + keyServerIP + '/api/v1/keys/preferences/' + preference, data=json.dumps(str(value)), headers=oauthHeader)
+			x = requests.put('http://' + keyServerIP + '/api/v1/preferences/' + preference, data=json.dumps(str(value)), headers=oauthHeader)
 			if x.status_code != 200:
 				print("Set preference failed with following error code:", x.status_code, x.content)
 				continue
@@ -118,7 +118,7 @@ def main():
 				print("Error: please select a valid info by inserting relative number (1-2)")
 				continue
 			if info == 1:
-				x = requests.get('http://' + keyServerIP + '/api/v1/keys/information/qkd_devices', headers=oauthHeader)
+				x = requests.get('http://' + keyServerIP + '/api/v1/information/qkd_devices', headers=oauthHeader)
 			elif info == 2:
 				level = eval(input("Insert desired log level:\n 1) INFO\n 2) WARNING\n 3) ERROR\n 4) ALL\n[1-4]: "))
 				if type(level) is not int or level < 1 or level > 4:
@@ -143,13 +143,13 @@ def main():
 						print("Error: start time must be expressed as 'Year-Month-Day Hour:minute:second'. Example '2020-07-20 16:53:15'")
 						continue
 				if level is not None and startT is not None:
-					x = requests.get('http://' + keyServerIP + '/api/v1/keys/information/log?level=' + level +'&startTime=' + startT, headers=oauthHeader)
+					x = requests.get('http://' + keyServerIP + '/api/v1/information/log?level=' + level +'&startTime=' + startT, headers=oauthHeader)
 				elif level is not None:
-					x = requests.get('http://' + keyServerIP + '/api/v1/keys/information/log?level=' + level, headers=oauthHeader)
+					x = requests.get('http://' + keyServerIP + '/api/v1/information/log?level=' + level, headers=oauthHeader)
 				elif startT is not None:
-					x = requests.get('http://' + keyServerIP + '/api/v1/keys/information/log?startTime=' + startT, headers=oauthHeader)
+					x = requests.get('http://' + keyServerIP + '/api/v1/information/log?startTime=' + startT, headers=oauthHeader)
 				else:
-					x = requests.get('http://' + keyServerIP + '/api/v1/keys/information/log', headers=oauthHeader)
+					x = requests.get('http://' + keyServerIP + '/api/v1/information/log', headers=oauthHeader)
 			# check result
 			if x.status_code != 200:
 				print("Get info failed with following error code:", x.status_code, x.content)

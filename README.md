@@ -155,7 +155,7 @@ If the method returns the status code `200` the request went fine and all the in
 - 503: Generic server error.
 
 ```sh
-POST https://keyServerIP/api/v1/keys/preferences/<preference>
+PUT https://keyServerIP/api/v1/preferences/<preference>
 ```
 This method can be used to change one of the settings in the server. Possible values for <preference> parameter are: `timeout`, `log_level` and `qkd_protocol`.
 If the method returns the status code `200` the request went fine and the related preference is updated. If an error occurs the possible replies are:
@@ -164,7 +164,7 @@ If the method returns the status code `200` the request went fine and the relate
 - 503: Generic server error.
 
 ```sh
-POST https://keyServerIP/api/v1/keys/information/<info>
+GET https://keyServerIP/api/v1/information/<info>
 ```
 This method is used to retrieve information about the internal status of the server. Possible values for <info> parameter are: `qkd_devices` and `log`.
 If the method returns the status code `200` the request went fine and all the information are available in the returned JSON object. If an error occurs the possible replies are:
