@@ -3,6 +3,8 @@ import requests
 import json
 import sys
 
+import api
+
 app = Flask(__name__)
 serverPort = 8080 
 prefix = "/api/v1"
@@ -106,7 +108,7 @@ def getPreferences() :
     return preferences, status
 
 @app.route(prefix+"/preferences/<preference>", methods=['PUT'])
-def setPreferences(preference) : 
+def setPreference(preference) : 
     # TODO: api function
     content = request.get_json()
     if (type(content) is dict) and ('preference' in content) and ('value' in content):
@@ -134,12 +136,12 @@ def deleteQKDMStreams(qkdm_ID) :
     return value, status
 
 # SOUTHBOUND INTERFACE 
-@app.route(prefix+"/qkdms/<qkdm_id>", methods=['POST'])
-def registerQKDM(qkdm_id): 
+@app.route(prefix+"/qkdms/<qkdm_ID>", methods=['POST'])
+def registerQKDM(qkdm_ID): 
     # TODO: api function
     content = request.get_json()
     if (type(content) is dict) and all (k in content for k in ('QKDM_ID', 'protocol', 'QKDM_IP', 'destination_QKS','max_key_count', 'key_size')):
-        if (qkdm_id == content['QKDM_ID']):
+        if (qkdm_ID == content['QKDM_ID']):
             QKDM_ID = content['QKDM_ID']
             protocol = content['protocol']
             QKDM_IP = content['QKDM_IP']
@@ -154,6 +156,15 @@ def registerQKDM(qkdm_id):
 
     value = {'message' : "error: invalid content"}
     return value, 500
+
+@app.route(prefix+"/qkdms/<qkdm_ID>", methods=['DELETE'])
+def unregisterQKDM(qkdm_ID): 
+    qkdm_ID = str(qkdm_ID)
+    # call function
+    status = 200
+    value = f"delete qkdm {qkdm_ID}"
+    return value, status 
+
 
 # EXTERNAL INTERFACE 
 @app.route(prefix+"/keys/<master_SAE_ID>/reserve", methods=['POST'])
@@ -229,7 +240,7 @@ def main() :
             if (serverPort < 0 or serverPort > 2**16 - 1):
                 raise Exception
         except: 
-            print("ERROR: use 'python3 appname <port>', port must be integer")
+            print("ERROR: use 'python3 appname <port>', port must be a valid port number")
 
     # check vault init
     # check db init 
