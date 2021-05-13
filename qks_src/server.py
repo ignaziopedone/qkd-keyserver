@@ -6,7 +6,7 @@ import sys
 import api
 
 app = Flask(__name__)
-serverPort = 8080 
+serverPort = 4000 
 prefix = "/api/v1"
 
 dafult_key_size = 128
