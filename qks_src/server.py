@@ -14,15 +14,13 @@ prefix = "/api/v1"
 # NORTHBOUND INTERFACE 
 @app.route(prefix+"/keys/<slave_SAE_ID>/status", methods=['GET'])
 def getStatus(slave_SAE_ID):
-    # TODO: api function
     slave_SAE_ID = str(slave_SAE_ID)
-    master_SAE_ID = "" # get it from authentication! 
+    master_SAE_ID = "SAE11" # get it from authentication! 
     status, value = api.getStatus(slave_SAE_ID, master_SAE_ID)
     
     if status: 
         return value, 200
     else: 
-        value = {'message' : "bad request: slave_SAE_ID not found or unreachable"}
         return value, 404
 
 @app.route(prefix+"/keys/<slave_SAE_ID>/enc_keys", methods=['POST'])
@@ -50,33 +48,29 @@ def getKey(slave_SAE_ID):
 
 @app.route(prefix+"/keys/<master_SAE_ID>/dec_keys", methods=['POST'])
 def getKeyWithKeyIDs(master_SAE_ID):
-    # TODO: api function
+    slave_SAE_ID = "" # get it from authentication! 
     master_SAE_ID = str(master_SAE_ID)
     content = request.get_json()
     if (type(content) is dict) : 
         if 'key_IDs' in content and type(content['key_IDs']) is list:         
             key_IDs = content['key_IDs']
-            #call function
-            status = 200
-            value = {'keys' : [
-                {'key_ID' : "id1", 'key' : "key1"}, 
-                {'key_ID' : "id2", 'key' : "key2"}, 
-            ]}
-    
-            return value, status
+            status, value = api.getKeyWithKeyIDs(master_SAE_ID, slave_SAE_ID, key_IDs)
+            if status: 
+                return value, 200
+            else: 
+                return value, 400
 
     value = {'message' : "bad request: request does not contains a valid json object"}
     return value, 500 
 
 @app.route(prefix+"/qkdms", methods=['GET'])
 def getQKDMs(): 
-    # TODO: api function
-    value = {'QKDM_list' : [
-        {'id' : "id1", 'protocol' : "fake", 'ip' : "ip1", 'destination_QKS' : "qks2"},
-        {'id' : "id2", 'protocol' : "fake", 'ip' : "ip2", 'destination_QKS' : "qks3"}
-
-    ]}
-    return value, 200
+    status, value = api.getQKDMs()
+    if status: 
+        return value, 200
+    else:
+        value = {'message' : "internal error"}
+        return value, 500
 
 @app.route(prefix+"/saes", methods=['POST'])
 def registerSAE(): 

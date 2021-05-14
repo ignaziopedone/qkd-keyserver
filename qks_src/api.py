@@ -29,12 +29,19 @@ qks = {
 
 # NORTHBOUND 
 def getStatus(slave_SAE_ID, master_SAE_ID) : 
-    status = {}
+    # TODO : request available keys to qkdms 
     client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
     qks_collection = client[mongodb['db']]['quantum_key_servers']
-    dest_qks = qks_collection.find_one()#{ "connected_sae": slave_SAE_ID }) 
 
-    if dest_qks is not None : 
+    me = qks_collection.find_one({"_id" : qks['id']})
+    my_saes = me['connected_sae']
+    if master_SAE_ID not in my_saes: 
+        status = {"message" : "slave_SAE_ID not found in this qkd network"}
+        return (False, status)
+    
+    dest_qks = qks_collection.find_one({ "connected_sae": slave_SAE_ID }) 
+
+    if dest_qks is not None: 
         res = {
             'source_KME_ID': qks['id'],
             'target_KME_ID': dest_qks['_id'],
@@ -60,10 +67,8 @@ def getStatus(slave_SAE_ID, master_SAE_ID) :
         return (True, res )
  
     else : 
-        return (False, status)
-
-
-    
+        status = {"message" : "slave_SAE_ID not found in this qkd network"}
+        return (False, status)   
 
 
 def getKey(slave_SAE_ID, master_SAE_ID, number=1, key_size=default_key_size) :
@@ -75,8 +80,14 @@ def getKeyWithKeyIDs(master_SAE_ID, slave_SAE_ID, key_IDs) :
     return keys
 
 def getQKDMs() : 
-    qkdms = {'QKDM_list' : []}
-    return qkdms
+    client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
+    qkdm_collection = client[mongodb['db']]['qkd_modules']
+    qkdm_list = qkdm_collection.find()
+    mod_list = []
+    for qkdm in qkdm_list:  
+        mod_list.append(qkdm)
+    qkdms = {'QKDM_list' : mod_list}
+    return (True, qkdms)
 
 def registerSAE(sae_ID) : 
     # push to redis 
