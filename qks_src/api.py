@@ -1,11 +1,70 @@
 import vaultClient
+from pymongo import MongoClient
+import yaml 
 
 default_key_size = 128
 
+config_file = open("qks_src/config.yaml", 'r')
+prefs = yaml.safe_load(config_file)
+
+mongodb = {
+    'host' : prefs['mongo_db']['host'],
+    'port' : prefs['mongo_db']['port'], 
+    'user' : prefs['mongo_db']['user'],
+    'password' : prefs['mongo_db']['password'],
+    'auth_src' : prefs['mongo_db']['auth_src'],
+    'db' : prefs['mongo_db']['db_name']
+}
+
+qks = {
+    'id' : prefs['qks']['KME_ID'],
+    'def_key_size' : prefs['qks']['DEF_KEY_SIZE'],
+    'max_key_count' : prefs['qks']['MAX_KEY_COUNT'],
+    'max_key_per_request' : prefs['qks']['MAX_KEY_PER_REQUEST'],
+    'max_key_size' : prefs['qks']['MAX_KEY_SIZE'],
+    'min_key_size' : prefs['qks']['MIN_KEY_SIZE'],
+    'max_sae_id_count' : prefs['qks']['MAX_SAE_ID_COUNT']
+}
+
+
 # NORTHBOUND 
 def getStatus(slave_SAE_ID, master_SAE_ID) : 
-    res = {}
-    return res 
+    status = {}
+    client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
+    qks_collection = client[mongodb['db']]['quantum_key_servers']
+    dest_qks = qks_collection.find_one()#{ "connected_sae": slave_SAE_ID }) 
+
+    if dest_qks is not None : 
+        res = {
+            'source_KME_ID': qks['id'],
+            'target_KME_ID': dest_qks['_id'],
+            'master_SAE_ID': master_SAE_ID,
+            'slave_SAE_ID': slave_SAE_ID,
+            'key_size': int(dest_qks['qos']['DEF_KEY_SIZE']),
+            'max_key_count': int(dest_qks['qos']['MAX_KEY_COUNT']),
+            'max_key_per_request': int(min(dest_qks['qos']['MAX_KEY_PER_REQUEST'], qks['max_key_per_request'])),
+            'max_key_size': int(min(dest_qks['qos']['MAX_KEY_SIZE'], qks['max_key_size'])),
+            'min_key_size': int(max(dest_qks['qos']['MIN_KEY_SIZE'], qks['max_key_size'])),
+            'max_SAE_ID_count': int(min(dest_qks['MAX_SAE_ID_COUNT'], qks['max_sae_id_count']) if 'MAX_SAE_ID_COUNT' in dest_qks else 0)
+        }
+        stored_key_count = 0 
+        key_stream_collection = client[mongodb['db']]['key_streams']
+        key_streams = key_stream_collection.find({"dest_qks" : dest_qks['_id']})
+        for stream in key_streams: 
+            module = stream['qkdm']
+            # available keys to module
+            av_k = 0
+            stored_key_count += av_k
+        
+        res['stored_key_count'] = stored_key_count
+        return (True, res )
+ 
+    else : 
+        return (False, status)
+
+
+    
+
 
 def getKey(slave_SAE_ID, master_SAE_ID, number=1, key_size=default_key_size) :
     keys = {'keys' : []}
@@ -60,4 +119,23 @@ def createStream(source_qks_ID, key_stream_ID, stream_type, qkdm_address=None):
 def closeStream(stream_ID, source_qks):
     return 
 
+
+# managment functions 
+def check_mongo_init() : 
+    user = mongodb['user']
+    password = mongodb['password']
+    auth_src = mongodb['auth_src']
+    host = mongodb['host']
+    port = mongodb['port']
+    client = MongoClient(f"mongodb://{user}:{password}@{host}:{port}/admin?authSource={auth_src}")
+
+    try: 
+        client.list_database_names() 
+        return True
+    except: 
+        return False 
+    
+
+
+    
 
