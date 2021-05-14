@@ -1,0 +1,16 @@
+version: "3.9"
+
+services: 
+    db: 
+        image: mongo:latest
+        container_name: mongo_auth
+        ports: 
+            - 27017:27017
+        environment: 
+            MONGO_INITDB_ROOT_USERNAME : rootuser
+            MONGO_INITDB_ROOT_PASSWORD : rootpwd
+            MONGO_INITDB_DATABASE: admin
+
+        
+    
+    

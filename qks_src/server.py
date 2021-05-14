@@ -1,26 +1,29 @@
 from flask import request, Flask
-import requests 
-import json
-import sys
 
+import requests 
+#import json
+import sys
 import api
 
 app = Flask(__name__)
 serverPort = 4000 
 prefix = "/api/v1"
 
-dafult_key_size = 128
+
 
 # NORTHBOUND INTERFACE 
 @app.route(prefix+"/keys/<slave_SAE_ID>/status", methods=['GET'])
 def getStatus(slave_SAE_ID):
     # TODO: api function
     slave_SAE_ID = str(slave_SAE_ID)
-    value = {'source_KME_ID' : "qks1",
-            'target_KME_ID' : "qks2", 
-            'master_SAE_id' : "senderSAE",
-            'slave_SAE_id' : slave_SAE_ID}
-    return value, 200
+    master_SAE_ID = "" # get it from authentication! 
+    status, value = api.getStatus(slave_SAE_ID, master_SAE_ID)
+    
+    if status: 
+        return value, 200
+    else: 
+        value = {'message' : "bad request: slave_SAE_ID not found or unreachable"}
+        return value, 404
 
 @app.route(prefix+"/keys/<slave_SAE_ID>/enc_keys", methods=['POST'])
 def getKey(slave_SAE_ID):
@@ -29,7 +32,7 @@ def getKey(slave_SAE_ID):
     content = request.get_json()
     if (type(content) is dict) : 
         number =content['number'] if 'number' in content and type(content['number']) is int else 1
-        key_size = content['size'] if 'size' in content and type(content['size']) is int else dafult_key_size
+        key_size = content['size'] if 'size' in content and type(content['size']) is int else None
         extension_mandatory = content['extension_mandatory'] if 'extension_mandatory' in content else None
         extension_optional = content['extension_optional'] if 'extension_optional' in content else None
         #call function
@@ -242,8 +245,15 @@ def main() :
         except: 
             print("ERROR: use 'python3 appname <port>', port must be a valid port number")
 
-    # check vault init
     # check db init 
+    db_init = api.check_mongo_init() 
+    if db_init: 
+        print("DB init successfully")
+    else: 
+        print("ERROR: unable to access DB")
+        return 
+
+    # check vault init
 
     app.run(host='0.0.0.0', port=serverPort)
 
