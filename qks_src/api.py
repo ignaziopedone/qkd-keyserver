@@ -63,7 +63,7 @@ def getStatus(slave_SAE_ID, master_SAE_ID) :
         key_stream_collection = mongo_client[mongodb['db']]['key_streams']
         key_streams = key_stream_collection.find({"dest_qks" : dest_qks['_id']})
         
-        if len(key_streams)!=0:
+        if key_streams.count() !=0:
             for stream in key_streams: 
                 module = stream['qkdm']
                 # ask available keys to module
@@ -74,7 +74,7 @@ def getStatus(slave_SAE_ID, master_SAE_ID) :
             return (True, res )
         else: 
             # no stream available. Try to open an indirect connection
-            return (True, "")
+            return (True, "This sae is connected but is unreachable: no direct connections")
  
     else : 
         status = {"message" : "slave_SAE_ID not found in this qkd network"}
@@ -101,16 +101,21 @@ def getKeyWithKeyIDs(master_SAE_ID, slave_SAE_ID, key_IDs) :
     
     # get all streams that have a reserved_key matching one of the requested one
     stream_collection = mongo_client[mongodb['db']]['key_streams']
-    query = {"reserved_keys.sae" : master_SAE_ID, "reserved_keys.AKID" : {"$in" : key_IDs}}
+    query = {"reserved_keys" : {"$elemMatch" : {"sae" : master_SAE_ID, "AKID" : {"$in" : key_IDs}}}}
     matching_streams = stream_collection.find(query)
+
+    # if no key available signal it 
+    if matching_streams.count() == 0:
+        status = {"message" : "none of your requester keys are available!"}
+        return (False, status)
 
     keys_to_be_returned = { 'keys' : []}
     for stream in matching_streams:
         for key in stream['reserved_keys']:
-            if key['AKID'] in key_IDs:
+            if key['AKID'] in key_IDs and key['sae'] == master_SAE_ID:
                 # for each requested AKID require all its chunks and build the aggregate key
                 # TODO: require key['kids'] to modules 
-                ret_status, returned_keys = (True, {})
+                ret_status, returned_keys = (True, {"ind1" : "chunk1", "ind2" : "chunk2"})
                 if ret_status: 
                     # if a key is not available in the module it won't be returned but the other keys will be returned correctly
                     aggregate_key = ""
@@ -119,7 +124,7 @@ def getKeyWithKeyIDs(master_SAE_ID, slave_SAE_ID, key_IDs) :
                     keys_to_be_returned['keys'].append({'key_ID' : key['AKID'], 'key' : aggregate_key})
 
                     # remove akid from reserved keys
-                    stream_collection.update({"_id" : stream['_id']}, {"$pull" : {"reserved_keys.AKID" : key['AKID']}})
+                    stream_collection.update({"_id" : stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : key['AKID']}}})
     return (True, keys_to_be_returned)
 
 

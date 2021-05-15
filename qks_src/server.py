@@ -15,7 +15,7 @@ prefix = "/api/v1"
 @app.route(prefix+"/keys/<slave_SAE_ID>/status", methods=['GET'])
 def getStatus(slave_SAE_ID):
     slave_SAE_ID = str(slave_SAE_ID)
-    master_SAE_ID = "SAE11" # get it from authentication! 
+    master_SAE_ID = "SAE21" # get it from authentication! 
     status, value = api.getStatus(slave_SAE_ID, master_SAE_ID)
     
     if status: 
@@ -48,7 +48,7 @@ def getKey(slave_SAE_ID):
 
 @app.route(prefix+"/keys/<master_SAE_ID>/dec_keys", methods=['POST'])
 def getKeyWithKeyIDs(master_SAE_ID):
-    slave_SAE_ID = "SAE11" # get it from authentication! 
+    slave_SAE_ID = "SAE21" # get it from authentication! 
     master_SAE_ID = str(master_SAE_ID)
     content = request.get_json()
     if (type(content) is dict) : 

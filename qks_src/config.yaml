@@ -7,7 +7,7 @@ mongo_db:
   db_name : qks_db
 
 qks:
-  KME_ID: qks1
+  KME_ID: qks2
   DEF_KEY_SIZE: 128
   MAX_KEY_COUNT: 500
   MAX_KEY_PER_REQUEST: 10
