@@ -1,7 +1,6 @@
 from flask import request, Flask
 
 import requests 
-#import json
 import sys
 import api
 
@@ -17,11 +16,11 @@ def getStatus(slave_SAE_ID):
     slave_SAE_ID = str(slave_SAE_ID)
     master_SAE_ID = "SAE21" # get it from authentication! 
     status, value = api.getStatus(slave_SAE_ID, master_SAE_ID)
-    
     if status: 
         return value, 200
     else: 
         return value, 404
+
 
 @app.route(prefix+"/keys/<slave_SAE_ID>/enc_keys", methods=['POST'])
 def getKey(slave_SAE_ID):
@@ -74,27 +73,27 @@ def getQKDMs():
 
 @app.route(prefix+"/saes", methods=['POST'])
 def registerSAE(): 
-    # TODO: api function
     content = request.get_json()
-    if (type(content) is dict) and ('name' in content):
-        sae_name = content['name']
-        # call function 
-        status = 200
-        value = {'sae_name' : sae_name}
-
-        return value, status
+    if (type(content) is dict) and ('id' in content) and type(content['id']) is str:
+        sae_ID = content['id']
+        status, value = api.registerSAE(sae_ID) 
+        if status:
+            return value, 200
+        else:
+            return value, 400
     else: 
-        value = {'message' : "error: invalid content or sae name"}
+        value = {'message' : "error: invalid content"}
         return value, 500
 
 @app.route(prefix+"/saes/<SAE_ID>", methods=['DELETE'])
 def unregisterSAE(SAE_ID): 
-    # TODO: api function
     SAE_ID = str(SAE_ID)
-    # call function 
-    status = 200
-    value = f"delete sae {SAE_ID}"
-    return value, status
+    status, value = api.unregisterSAE(SAE_ID) 
+    if status: 
+        return value, 200
+    else: 
+        return value, 400
+
 
 @app.route(prefix+"/preferences", methods=['GET'])
 def getPreferences() : 
@@ -199,30 +198,34 @@ def forwardData():
 
 @app.route(prefix+"/streams", methods=['POST'])
 def createStream(): 
-    # TODO: api function
     content = request.get_json()
     if (type(content) is dict) and all (k in content for k in ('source_qks_ID', 'key_stream_ID', 'type')):
-        # call function 
-        source_qks_ID = content['source_qks_ID']
+        source_qks_ID = content['source_qks_ID'] 
         key_stream_ID = content['key_stream_ID']
         stream_type = content['type']
-        qkdm_address = content['qkdm_address'] if 'qkdm_address' in content else None
+        qkdm_address = content['qkdm_address'] if 'qkdm_address' in content and type(content['qkdm_address']) is str else None
 
-        value = qkdm_address if qkdm_address is not None else "ok"
-        return value, 200 
-    else: 
-        value = {'message' : "error: invalid content"}
-        return value, 500
+        if type(source_qks_ID) is str and type(key_stream_ID) is str and type(stream_type) is str:
+            status, value = api.createStream(source_qks_ID, key_stream_ID, stream_type, qkdm_address)
+            if status: 
+                return value, 200
+            else: 
+                return value, 400
+
+    value = {'message' : "error: invalid content"}
+    return value, 500
         
 @app.route(prefix+"/streams/<stream_ID>", methods=['DELETE'])
 def closeStream(stream_ID): 
-    # TODO: api function
     stream_ID = str(stream_ID)
     content = request.get_json() 
-    if (type(content) is dict) and ('source_qks_ID' in content):
+    if (type(content) is dict) and ('source_qks_ID' in content) and type(content['source_qks_ID']) is str:
         source_qks_ID = content['source_qks_ID']
-        # call function 
-        return "ok", 200
+        status, value = api.closeStream(stream_ID, source_qks_ID)
+        if status: 
+            return value, 200
+        else: 
+            return value, 400
 
     else: 
         value = {'message' : "error: invalid content"}
