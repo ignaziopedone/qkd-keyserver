@@ -48,7 +48,7 @@ def getKey(slave_SAE_ID):
 
 @app.route(prefix+"/keys/<master_SAE_ID>/dec_keys", methods=['POST'])
 def getKeyWithKeyIDs(master_SAE_ID):
-    slave_SAE_ID = "" # get it from authentication! 
+    slave_SAE_ID = "SAE11" # get it from authentication! 
     master_SAE_ID = str(master_SAE_ID)
     content = request.get_json()
     if (type(content) is dict) : 

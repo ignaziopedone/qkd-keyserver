@@ -6,6 +6,7 @@ default_key_size = 128
 
 config_file = open("qks_src/config.yaml", 'r')
 prefs = yaml.safe_load(config_file)
+mongo_client = None # once it has been initialized all APIs use the same client
 
 mongodb = {
     'host' : prefs['mongo_db']['host'],
@@ -30,19 +31,23 @@ qks = {
 # NORTHBOUND 
 def getStatus(slave_SAE_ID, master_SAE_ID) : 
     # TODO : request available keys to qkdms 
-    client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
-    qks_collection = client[mongodb['db']]['quantum_key_servers']
+    global mongo_client
+    if mongo_client is None:
+        mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
+    qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']
 
+    # check that master_SAE is registered to this qks
     me = qks_collection.find_one({"_id" : qks['id']})
     my_saes = me['connected_sae']
     if master_SAE_ID not in my_saes: 
-        status = {"message" : "slave_SAE_ID not found in this qkd network"}
+        status = {"message" : "master_SAE_ID not registered on this host"}
         return (False, status)
     
     dest_qks = qks_collection.find_one({ "connected_sae": slave_SAE_ID }) 
-
+    # if slave_SAE is present in this qkd network
     if dest_qks is not None: 
         res = {
+            # where there are values that can be different between master and slave host choose the more conservative one
             'source_KME_ID': qks['id'],
             'target_KME_ID': dest_qks['_id'],
             'master_SAE_ID': master_SAE_ID,
@@ -55,16 +60,21 @@ def getStatus(slave_SAE_ID, master_SAE_ID) :
             'max_SAE_ID_count': int(min(dest_qks['MAX_SAE_ID_COUNT'], qks['max_sae_id_count']) if 'MAX_SAE_ID_COUNT' in dest_qks else 0)
         }
         stored_key_count = 0 
-        key_stream_collection = client[mongodb['db']]['key_streams']
+        key_stream_collection = mongo_client[mongodb['db']]['key_streams']
         key_streams = key_stream_collection.find({"dest_qks" : dest_qks['_id']})
-        for stream in key_streams: 
-            module = stream['qkdm']
-            # available keys to module
-            av_k = 0
-            stored_key_count += av_k
         
-        res['stored_key_count'] = stored_key_count
-        return (True, res )
+        if len(key_streams)!=0:
+            for stream in key_streams: 
+                module = stream['qkdm']
+                # ask available keys to module
+                av_k = 0
+                stored_key_count += av_k
+            
+            res['stored_key_count'] = stored_key_count
+            return (True, res )
+        else: 
+            # no stream available. Try to open an indirect connection
+            return (True, "")
  
     else : 
         status = {"message" : "slave_SAE_ID not found in this qkd network"}
@@ -76,13 +86,50 @@ def getKey(slave_SAE_ID, master_SAE_ID, number=1, key_size=default_key_size) :
     return keys
 
 def getKeyWithKeyIDs(master_SAE_ID, slave_SAE_ID, key_IDs) :
-    keys = {'keys' : []}
-    return keys
+    # TODO: require single keys (indexes) to qkdms
+    global mongo_client
+    if mongo_client is None:
+        mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
+    qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']
+
+    # check that master_SAE is registered to this qks
+    me = qks_collection.find_one({"_id" : qks['id']})
+    my_saes = me['connected_sae']
+    if slave_SAE_ID not in my_saes: 
+        status = {"message" : "slave_SAE_ID not found in this host"}
+        return (False, status)
+    
+    # get all streams that have a reserved_key matching one of the requested one
+    stream_collection = mongo_client[mongodb['db']]['key_streams']
+    query = {"reserved_keys.sae" : master_SAE_ID, "reserved_keys.AKID" : {"$in" : key_IDs}}
+    matching_streams = stream_collection.find(query)
+
+    keys_to_be_returned = { 'keys' : []}
+    for stream in matching_streams:
+        for key in stream['reserved_keys']:
+            if key['AKID'] in key_IDs:
+                # for each requested AKID require all its chunks and build the aggregate key
+                # TODO: require key['kids'] to modules 
+                ret_status, returned_keys = (True, {})
+                if ret_status: 
+                    # if a key is not available in the module it won't be returned but the other keys will be returned correctly
+                    aggregate_key = ""
+                    for val in returned_keys.values():
+                        aggregate_key += val
+                    keys_to_be_returned['keys'].append({'key_ID' : key['AKID'], 'key' : aggregate_key})
+
+                    # remove akid from reserved keys
+                    stream_collection.update({"_id" : stream['_id']}, {"$pull" : {"reserved_keys.AKID" : key['AKID']}})
+    return (True, keys_to_be_returned)
+
 
 def getQKDMs() : 
-    client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
-    qkdm_collection = client[mongodb['db']]['qkd_modules']
-    qkdm_list = qkdm_collection.find()
+    # return the whole qkdm collection
+    global mongo_client
+    if mongo_client is None:
+        mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
+    qkdms_collection = mongo_client[mongodb['db']]['qkd_modules']
+    qkdm_list = qkdms_collection.find()
     mod_list = []
     for qkdm in qkdm_list:  
         mod_list.append(qkdm)
@@ -119,6 +166,7 @@ def unregisterQKDM(qkdm_ID):
 
 # EXTERNAL 
 def reserveKeys(master_SAE_ID, slave_SAE_ID, key_stream_ID, key_lenght, key_ID_list): 
+    # check kids uniqueness in stream.reservedKeys 
     return 
 
 def forwardData(data, decryption_key_id, decryption_key_stream): 
@@ -131,17 +179,19 @@ def closeStream(stream_ID, source_qks):
     return 
 
 
-# managment functions 
-def check_mongo_init() : 
+# MANAGEMENT FUNCTIONS
+
+def check_mongo_init() :
+    # check that the qks can access admin DB with root credentials  
     user = mongodb['user']
     password = mongodb['password']
     auth_src = mongodb['auth_src']
     host = mongodb['host']
     port = mongodb['port']
-    client = MongoClient(f"mongodb://{user}:{password}@{host}:{port}/admin?authSource={auth_src}")
+    test_mongo_client = MongoClient(f"mongodb://{user}:{password}@{host}:{port}/admin?authSource={auth_src}")
 
     try: 
-        client.list_database_names() 
+        test_mongo_client.list_database_names() 
         return True
     except: 
         return False 

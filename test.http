@@ -1,5 +1,6 @@
 # NORTHBOUND INTERFACE 
-GET http://172.22.152.145:8080/api/v1/keys/saeID/status HTTP/1.1
+## getStatus
+GET http://172.22.152.145:4000/api/v1/keys/SAE21/status HTTP/1.1
 content-type: application/json
 
 ### 
@@ -21,7 +22,8 @@ content-type: application/json
 }
 
 ###
-GET http://172.22.152.145:8080/api/v1/qkdms HTTP/1.1
+## getQKDMs
+GET http://172.22.152.145:4000/api/v1/qkdms HTTP/1.1
 
 ###
 POST http://172.22.152.145:8080/api/v1/saes HTTP/1.1
