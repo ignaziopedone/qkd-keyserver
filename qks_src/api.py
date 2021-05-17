@@ -150,7 +150,7 @@ def registerSAE(sae_ID: str) -> tuple:
 
     sae_qks = qks_collection.find_one({"connected_sae" : sae_ID})
     if sae_qks is not None: 
-        value = {"message" : "ERROR: this SAE is registered to another server"}
+        value = {"message" : "ERROR: this SAE is already registered in this network"}
         return (False, value)
     else : 
         qks_collection.update({ "_id": qks['id'] }, { "$addToSet": { "connected_sae": sae_ID  }})
@@ -215,23 +215,27 @@ def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qkdm_add
     if mongo_client is None:
         mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
     qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']
-    stream_collection = [mongodb['db']]['key_streams']
-    qkdm_collection = [mongodb['db']]['qkd_modules']
+    stream_collection = mongo_client[mongodb['db']]['key_streams']
+    qkdm_collection = mongo_client[mongodb['db']]['qkd_modules']
     
     
     if stream_type == "indirect":
         # open an indirect stream 
-        return (False, "not implemented yet")
+        return (False, "ERROR: Indirect stream not implemented yet")
 
     elif stream_type == "direct" and type(qkdm_address) is str:
-        if qks_collection.find_one({"id" : source_qks_ID}) is None or stream_collection.find_one({"_id": key_stream_ID }) is not None:
+        if qks_collection.find_one({"_id" : source_qks_ID}) is None or stream_collection.find_one({"_id": key_stream_ID }) is not None:
             value = {'message' : "ERROR: invalid qks_ID or stream_ID"}
             return (False, value)
         
-        if qkdm_collection.find_one({"address.ip" : qkdm_address}) is not None: 
+        selected_qkdm = qkdm_collection.find_one({"address.ip" : qkdm_address})
+        if  selected_qkdm is not None: 
             # call open connect on the specified qkdm 
             ret_val = 0
             if ret_val == 0: 
+                in_qkdm = {"id" : selected_qkdm['_id'], "address" : selected_qkdm['address']}
+                new_stream = {"_id" : key_stream_ID, "dest_qks" : source_qks_ID, "reserved_keys" : [], "qkdm" : in_qkdm}
+                stream_collection.insert_one(new_stream)
                 value = {'message' : "stream successfully created"}
                 return (True, value)
             else: 
@@ -247,9 +251,7 @@ def closeStream(stream_ID:str, source_qks:str) -> tuple:
     global mongo_client
     if mongo_client is None:
         mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
-    qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']
-    stream_collection = [mongodb['db']]['key_streams']
-    qkdm_collection = [mongodb['db']]['qkd_modules']
+    stream_collection = mongo_client[mongodb['db']]['key_streams']
     
     stream =  stream_collection.find_one({"_id" : stream_ID, "dest_qks" : source_qks}) 
     if stream is None:
@@ -261,6 +263,7 @@ def closeStream(stream_ID:str, source_qks:str) -> tuple:
         # call close on the specified qkdm 
         ret_val = 0
         if ret_val == 0: 
+            stream_collection.delete_one({"_id" : stream_ID})
             value = {'message' : "stream successfully closed"}
             return (True, value)
         else: 
