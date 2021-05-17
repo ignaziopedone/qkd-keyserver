@@ -125,7 +125,7 @@ def getKeyWithKeyIDs(master_SAE_ID: str, slave_SAE_ID:str, key_IDs:list) -> tupl
                     keys_to_be_returned['keys'].append({'key_ID' : key['AKID'], 'key' : aggregate_key})
 
                     # remove akid from reserved keys
-                    stream_collection.update({"_id" : stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : key['AKID']}}})
+                    stream_collection.update_one({"_id" : stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : key['AKID']}}})
     return (True, keys_to_be_returned)
 
 def getQKDMs() -> tuple: 
@@ -153,9 +153,10 @@ def registerSAE(sae_ID: str) -> tuple:
         value = {"message" : "ERROR: this SAE is already registered in this network"}
         return (False, value)
     else : 
-        qks_collection.update({ "_id": qks['id'] }, { "$addToSet": { "connected_sae": sae_ID  }})
+        res = qks_collection.update_one({ "_id": qks['id'] }, { "$addToSet": { "connected_sae": sae_ID  }})
         value = {"message" : "SAE successfully registered to this server"}
         return (True, value)
+
 
 def unregisterSAE(sae_ID: str) -> tuple: 
     # TODO: push to redis 
@@ -169,7 +170,7 @@ def unregisterSAE(sae_ID: str) -> tuple:
         value = {"message" : "ERROR: this SAE is NOT registered to this server"}
         return (False, value)
     else : 
-        qks_collection.update({ "_id": qks['id'] }, { "$pull": { "connected_sae": sae_ID  }})
+        res = qks_collection.update_one({ "_id": qks['id'] }, { "$pull": { "connected_sae": sae_ID  }})
         value = {"message" : "SAE successfully registered to this server"}
         return (True, value) 
 
@@ -200,10 +201,74 @@ def unregisterQKDM(qkdm_ID:str):
     return 
 
 # EXTERNAL 
-# TODO
 def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_lenght:int, key_ID_list:list): 
-    # check kids uniqueness in stream.reservedKeys 
-    return 
+    global mongo_client
+    if mongo_client is None:
+        mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
+    qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']  
+    key_stream_collection = mongo_client[mongodb['db']]['key_streams']
+
+    me = qks_collection.find_one({"_id" : qks['id'], "connected_sae" : slave_SAE_ID})
+    if me is None: 
+        status = {"message" : "ERROR: slave_SAE_ID not registered on this host"}
+        return (False, status) 
+
+    key_stream = key_stream_collection.find_one({"_id" : key_stream_ID})
+    if key_stream is None: 
+        status = {"message" : "ERROR: invalid key_stream_ID"}
+        return (False, status) 
+
+    valid_list = True
+    kids_to_be_checked = set()
+    akids = set()
+    for element in key_ID_list: 
+        if not('AKID' in element and 'kids' in element and type(element['kids']) is list) or (key_stream['standard_key_size']*len(element['kids']) != key_lenght): 
+            valid_list = False
+            break
+        else: 
+            element['sae'] : master_SAE_ID
+            kids_to_be_checked.update(element['kids'])
+            akids.add(element['AKID'])
+
+    if not valid_list: 
+        status = {"message" : "ERROR: key_ID_list not properly formatted"}
+        return (False, status)
+    
+    kids_per_akid = int(key_lenght / key_stream['standard_key_size'])
+    if (len(akids) != len(key_ID_list)) or len(kids_to_be_checked)!= len(akids)*kids_per_akid : 
+        status = {"message" : "ERROR: there are some duplication in AKIDs or kids received"}
+        return (False, status) 
+
+    if 'qkdm' not in key_stream: 
+        status = {"message" : "ERROR: indirect streams not supported yet"}
+        return (False, status) 
+
+    
+    # TODO: check valid kids with the module 
+    available_kids = True 
+    if not available_kids:
+        status = {"message" : "ERROR: some kids are not available! "}
+        return (False, status)  
+
+    query =  {"_id" : key_stream_ID, "reserved_keys" : {
+        "$not" : {
+            "$elemMatch" :  {"$or" : [
+                {"AKID" : {"$in" : akids}}, 
+                {"kids" : {"$in" : kids_to_be_checked}}]
+            }
+        } 
+    }}
+ 
+    update = {"$push" : {"reserved_keys" : {"$each" : key_ID_list}}}
+    res = key_stream_collection.update_one(query, update)
+    print(f"find: {res.matched_count} - updated : {res.modified_count}")
+    if res.modified_count != 1:  
+        status = {"message" : "ERROR: unable to reserve these keys due to AKID or kids duplication! "}
+        return (False, status)
+    else: 
+        status = {"message" : "keys reserved correctly!  "}
+        return (True, status)
+
 
 # TODO
 def forwardData(data, decryption_key_id:str, decryption_key_stream:str): 

@@ -94,7 +94,6 @@ def unregisterSAE(SAE_ID):
     else: 
         return value, 400
 
-
 @app.route(prefix+"/preferences", methods=['GET'])
 def getPreferences() : 
     # TODO: api function
@@ -175,8 +174,11 @@ def reserveKeys(master_SAE_ID):
             key_lenght = int(content['key_lenght'])
             key_ID_list = content['key_ID_list']
 
-            #call function 
-            return "ok", 200 
+            status, value = api.reserveKeys(master_SAE_ID, slave_SAE_ID, key_stream_ID, key_lenght, key_ID_list)
+            if status: 
+                return value, 200
+            else: 
+                return value, 400
 
     value = {'message' : "error: invalid content"}
     return value, 500
