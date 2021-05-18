@@ -1,0 +1,190 @@
+version: "3.9"
+
+networks:
+    frontend:
+      ipam:
+        config:
+          - subnet: 172.16.1.0/24
+
+services: 
+    a_r: 
+        image: qkd_routing
+        ports: 
+            - 10002:10002
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.2
+        volumes:
+            - ./results:/usr/app/res
+        container_name: a_r
+        command: ["A"]
+    
+    b_r: 
+        image: qkd_routing
+        ports: 
+            - 10003:10003
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.3
+        volumes:
+            - ./results:/usr/app/res
+        container_name: b_r
+        command: ["B"]
+
+    c_r: 
+        image: qkd_routing
+        ports: 
+            - 10004:10004
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.4
+        volumes:
+            - ./results:/usr/app/res
+        container_name: c_r
+        command: ["C"]
+
+    d_r: 
+        image: qkd_routing
+        ports: 
+            - 10005:10005
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.5
+        volumes:
+            - ./results:/usr/app/res
+        container_name: d_r
+        command: ["D"]
+
+    e_r: 
+        image: qkd_routing
+        ports: 
+            - 10006:10006
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.6
+        volumes:
+            - ./results:/usr/app/res
+        container_name: e_r
+        command: ["E"]
+
+    f_r: 
+        image: qkd_routing
+        ports: 
+            - 10007:10007
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.7
+        volumes:
+            - ./results:/usr/app/res
+        container_name: f_r
+        command: ["F"]
+
+    g_r: 
+        image: qkd_routing
+        ports: 
+            - 10008:10008
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.8
+        volumes:
+            - ./results:/usr/app/res
+        container_name: g_r
+        command: ["G"]
+
+    h_r: 
+        image: qkd_routing
+        ports: 
+            - 10009:10009
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.9
+        volumes:
+            - ./results:/usr/app/res
+        container_name: h_r
+        command: ["H"]
+    
+    i_r: 
+        image: qkd_routing
+        ports: 
+            - 10010:10010
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.10
+        volumes:
+            - ./results:/usr/app/res
+        container_name: i_r
+        command: ["I"]
+    
+    l_r: 
+        image: qkd_routing
+        ports: 
+            - 10011:10011
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.11
+        volumes:
+            - ./results:/usr/app/res
+        container_name: l_r
+        command: ["L"]
+    
+    m_r: 
+        image: qkd_routing
+        ports: 
+            - 10012:10012
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.12
+        volumes:
+            - ./results:/usr/app/res
+        container_name: m_r
+        command: ["M"]
+
+    n_r: 
+        image: qkd_routing
+        ports: 
+            - 10013:10013
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.13
+        volumes:
+            - ./results:/usr/app/res
+        container_name: n_r
+        command: ["N"]
+    
+    o_r: 
+        image: qkd_routing
+        ports: 
+            - 10014:10014
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.14
+        volumes:
+            - ./results:/usr/app/res
+        container_name: o_r
+        command: ["O"]
+
+    p_r: 
+        image: qkd_routing
+        ports: 
+            - 10015:10015
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.15
+        volumes:
+            - ./results:/usr/app/res
+        container_name: p_r
+        command: ["P"]
+
+    q_r: 
+        image: qkd_routing
+        ports: 
+            - 10016:10016
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.16
+        volumes:
+            - ./results:/usr/app/res
+        container_name: q_r
+        command: ["Q"]
+
+    

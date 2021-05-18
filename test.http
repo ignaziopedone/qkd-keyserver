@@ -54,10 +54,12 @@ Content-Type: application/json
 }
 
 ###
-POST http://172.22.152.145:8080/api/v1/qkdms/qkdm1/streams HTTP/1.1
+## startQKDMStream
+POST http://172.22.152.145:4000/api/v1/qkdms/qkdm1/streams HTTP/1.1
 
 ###
-DELETE http://172.22.152.145:8080/api/v1/qkdms/qkdm1/streams HTTP/1.1
+## deleteQKDMStream
+DELETE http://172.22.152.145:4000/api/v1/qkdms/qkdm1/streams HTTP/1.1
 
 ###
 POST http://172.22.152.145:8080/api/v1/qkdms/id1 HTTP/1.1
