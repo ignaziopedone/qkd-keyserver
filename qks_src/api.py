@@ -1,7 +1,8 @@
 
 import vaultClient
 from pymongo import MongoClient
-import yaml 
+import yaml
+import requests 
 
 config_file = open("qks_src/config.yaml", 'r')
 prefs = yaml.safe_load(config_file)
@@ -74,7 +75,8 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple :
             return (True, res )
         else: 
             # no stream available. Try to open an indirect connection
-            return (True, "This sae is connected but is unreachable: no direct connections")
+            status = {"message" : "ERROR: This sae is connected but is unreachable: no direct connections are available"}
+            return (True, status)
  
     else : 
         status = {"message" : "slave_SAE_ID not found in this qkd network"}
@@ -159,7 +161,6 @@ def registerSAE(sae_ID: str) -> tuple:
         value = {"message" : "SAE successfully registered to this server"}
         return (True, value)
 
-
 def unregisterSAE(sae_ID: str) -> tuple: 
     # TODO: push to redis 
     global mongo_client
@@ -185,9 +186,58 @@ def getPreferences() :
 def setPreference(preference:str, value) : 
     return 
 
-# TODO
 def startQKDMStream(qkdm_ID:str) : 
-    return 
+    global mongo_client
+    if mongo_client is None:
+        mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
+    qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']  
+    qkdm_collection = mongo_client[mongodb['db']]['qkd_modules']  
+    key_stream_collection = mongo_client[mongodb['db']]['key_streams'] 
+
+    qkdm = qkdm_collection.find_one({"_id" : qkdm_ID})
+    if qkdm is None: 
+        status = {"message" : "ERROR: this qkdm is not registered on this host! "}
+        return (False, status)
+    
+    qkdm_address = qkdm['address']['ip']
+    qkdm_port = qkdm['address']['port']
+    # call OPEN_CONNECT on the found QKDM 
+    res, key_stream_ID = 0, "stream3" 
+    if res != 0: 
+        status = {"message" : "ERROR: QKDM unable to open the stream"}
+        return (False, status)
+        
+    post_data = {
+        'qkdm_id' : qkdm['reachable_qkdm'],
+        'source_qks_ID' : qks['id'],
+        'type' : "direct",
+        'key_stream_ID' : key_stream_ID
+    }
+
+    # call createStream on the peer qks 
+    dest_qks = qks_collection.find_one({"_id" : qkdm['reachable_qks']})
+    dest_qks_ip = dest_qks['address']['ip']
+    dest_qks_port = int(dest_qks['address']['port'])
+    response = requests.post(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/streams", json=post_data)
+     
+    if response.status_code != 200 :
+        status = {"message" : "ERROR: peer QKS unable to create the stream"}
+        return (False, status)
+    
+    # everything ok: insert the stream in the db 
+    in_qkdm = {"id" : qkdm['_id'], "address" : qkdm['address']}
+    stream = {"_id" : key_stream_ID+"a", 
+        "dest_qks" : dest_qks['_id'], 
+        "standard_key_size" : qkdm['parameters']['standard_key_size'], 
+        "reserved_keys" : [], 
+        "qkdm" : in_qkdm
+    }
+    key_stream_collection.insert_one(stream)
+
+    status = {"message" : f"OK: stream {key_stream_ID}started successfully"}
+    return (True, status)
+        
+ 
 
 # TODO
 def deleteQKDMStreams(qkdm_ID:str) : 
@@ -247,7 +297,8 @@ def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_leng
 
     
     # TODO: check valid kids with the module 
-    available_kids = True 
+    res = 0
+    available_kids = True if res == 0 else False
     if not available_kids:
         status = {"message" : "ERROR: some kids are not available! "}
         return (False, status)  
@@ -277,7 +328,7 @@ def forwardData(data, decryption_key_id:str, decryption_key_stream:str):
     return 
 
 
-def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qkdm_address:str=None) -> tuple:
+def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qkdm_id:str=None) -> tuple:
     global mongo_client
     if mongo_client is None:
         mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
@@ -290,18 +341,18 @@ def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qkdm_add
         # open an indirect stream 
         return (False, "ERROR: Indirect stream not implemented yet")
 
-    elif stream_type == "direct" and type(qkdm_address) is str:
+    elif stream_type == "direct" and type(qkdm_id) is str:
         if qks_collection.find_one({"_id" : source_qks_ID}) is None or stream_collection.find_one({"_id": key_stream_ID }) is not None:
             value = {'message' : "ERROR: invalid qks_ID or stream_ID"}
             return (False, value)
         
-        selected_qkdm = qkdm_collection.find_one({"address.ip" : qkdm_address})
+        selected_qkdm = qkdm_collection.find_one({"_id" : qkdm_id})
         if  selected_qkdm is not None: 
             # call open connect on the specified qkdm 
             ret_val = 0
             if ret_val == 0: 
                 in_qkdm = {"id" : selected_qkdm['_id'], "address" : selected_qkdm['address']}
-                new_stream = {"_id" : key_stream_ID, "dest_qks" : source_qks_ID, "reserved_keys" : [], "qkdm" : in_qkdm}
+                new_stream = {"_id" : key_stream_ID, "dest_qks" : source_qks_ID, "reserved_keys" : [], "qkdm" : in_qkdm, "standard_key_size" : selected_qkdm['parameters']['standard_key_size']}
                 stream_collection.insert_one(new_stream)
                 value = {'message' : "stream successfully created"}
                 return (True, value)
@@ -310,7 +361,7 @@ def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qkdm_add
                 return (False, value)
 
     else: 
-        value = {'message' : "ERROR: invalid stream type or qkdm_address"}
+        value = {'message' : "ERROR: invalid stream type or qkdm_id"}
         return (False, value)
 
 

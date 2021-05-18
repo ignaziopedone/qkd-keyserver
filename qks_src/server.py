@@ -5,7 +5,7 @@ import sys
 import api
 
 app = Flask(__name__)
-serverPort = 4000 
+serverPort = 4000
 prefix = "/api/v1"
 
 
@@ -119,8 +119,11 @@ def startQKDMStream(qkdm_ID) :
     # TODO: api function
     status = 200
     qkdm_ID = str(qkdm_ID)
-    value = f"started stream on module {qkdm_ID} "
-    return value, status
+    status, value = api.startQKDMStream(qkdm_ID)
+    if status: 
+        return value, 200
+    else: 
+        return value, 400
 
 @app.route(prefix+"/qkdms/<qkdm_ID>/streams", methods=['DELETE'])
 def deleteQKDMStreams(qkdm_ID) : 
@@ -204,10 +207,10 @@ def createStream():
         source_qks_ID = content['source_qks_ID'] 
         key_stream_ID = content['key_stream_ID']
         stream_type = content['type']
-        qkdm_address = content['qkdm_address'] if 'qkdm_address' in content and type(content['qkdm_address']) is str else None
+        qkdm_id = content['qkdm_id'] if 'qkdm_id' in content and type(content['qkdm_id']) is str else None
 
         if type(source_qks_ID) is str and type(key_stream_ID) is str and type(stream_type) is str:
-            status, value = api.createStream(source_qks_ID, key_stream_ID, stream_type, qkdm_address)
+            status, value = api.createStream(source_qks_ID, key_stream_ID, stream_type, qkdm_id)
             if status: 
                 return value, 200
             else: 
