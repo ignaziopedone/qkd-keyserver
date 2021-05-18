@@ -119,7 +119,7 @@
   	"SAE ID" : "String", 
 	"type " : "[static/dinamic]",
 	"next hop id" : "String", 
-	"next hop address" : "String",
+	"next hop address" : {"ip" :"String", "port" : "Integer"},
 	"cost" : "Integer" ,
 	"length" : "Integer" 
 }
