@@ -32,7 +32,7 @@
 
 
 ## JSONs data
-![](./img/server_API_JSON.png)
+![](./img/API_server_JSON.png)
 
 # QKD MODULE APIs
 ## Southbound interface : QKS to QKD Module
@@ -54,7 +54,7 @@
 | exchange              | /api/v1/qkdm/actions/exchange         | POST  |       |
 
 ## JSONs format 
-![](./img/module_API_JSON.png)
+![](./img/API_module_JSON.png)
 
 
 # Plant UML Codes 
@@ -160,7 +160,7 @@
 @startjson
 {
     "**registerQKDM request**":"",
-    "QKDM_ID":"String"
+    "QKDM_ID":"String",
     "QKDM_IP" : "String",
     "protocol" : "String",
     "max_key_count" : "Integer", 
@@ -177,7 +177,7 @@
         "port" : "Integer", 
         "name" : "String",
         "username" : "String", 
-        "password" : "String",
+        "password" : "String"
     },
     "vault_data" : {
         "ip_address" : "String",
@@ -192,16 +192,10 @@
 @startjson
 {
     "**registerSAE request**":"",
-    "SAE_data" : {"Anything" : ""}
+    "id" : "String"
 }
 @endjson
 
-@startjson
-{
-    "**registerSAE answer**":"",
-    "qks_data" : {"Anything" : ""}
-}
-@endjson
 
 @startjson
 {
@@ -256,7 +250,7 @@
 @startjson
 {
     "**CLOSE answer**":"",
-    "status" : "String"
+    "status" : "Integer"
 }
 @endjson
 
@@ -340,7 +334,8 @@
 @startjson
 {
     "**attachToServer request**":"",
-    "qks_IP" : "String"
+    "qks_IP" : "String",
+    "qks_port" : "String"
 }
 @endjson
 
