@@ -3,8 +3,6 @@ import vaultClient
 from pymongo import MongoClient
 import yaml 
 
-default_key_size = 128
-
 config_file = open("qks_src/config.yaml", 'r')
 prefs = yaml.safe_load(config_file)
 mongo_client = None # once it has been initialized all APIs use the same client
@@ -30,7 +28,7 @@ qks = {
 
 
 # NORTHBOUND 
-def getStatus(slave_SAE_ID : str, master_SAE_ID : str) -> tuple : 
+def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple : 
     # TODO : request available keys to qkdms 
     global mongo_client
     if mongo_client is None:
@@ -38,11 +36,12 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str) -> tuple :
     qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']
 
     # check that master_SAE is registered to this qks
-    me = qks_collection.find_one({"_id" : qks['id']})
-    my_saes = me['connected_sae']
-    if master_SAE_ID not in my_saes: 
-        status = {"message" : "master_SAE_ID not registered on this host"}
-        return (False, status)
+    if master_SAE_ID is not None:
+        me = qks_collection.find_one({"_id" : qks['id']})
+        my_saes = me['connected_sae']
+        if master_SAE_ID not in my_saes: 
+            status = {"message" : "master_SAE_ID not registered on this host"}
+            return (False, status)
     
     dest_qks = qks_collection.find_one({ "connected_sae": slave_SAE_ID }) 
     # if slave_SAE is present in this qkd network
@@ -82,23 +81,26 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str) -> tuple :
         return (False, status)   
 
 # TODO
-def getKey(slave_SAE_ID: str, master_SAE_ID : str, number : int =1, key_size : int =default_key_size) :
+def getKey(slave_SAE_ID: str , master_SAE_ID : str = None, number : int =1, key_size : int = None) :
+    if key_size is None: 
+        key_size = qks['def_key_size']
     keys = {'keys' : []}
     return keys
 
-def getKeyWithKeyIDs(master_SAE_ID: str, slave_SAE_ID:str, key_IDs:list) -> tuple :
+def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str = None) -> tuple :
     # TODO: require single keys (indexes) to qkdms
     global mongo_client
     if mongo_client is None:
         mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
     qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']
 
-    # check that master_SAE is registered to this qks
-    me = qks_collection.find_one({"_id" : qks['id']})
-    my_saes = me['connected_sae']
-    if slave_SAE_ID not in my_saes: 
-        status = {"message" : "slave_SAE_ID not found in this host"}
-        return (False, status)
+    # check that slave_SAE is registered to this qks
+    if slave_SAE_ID is not None:
+        me = qks_collection.find_one({"_id" : qks['id']})
+        my_saes = me['connected_sae']
+        if slave_SAE_ID not in my_saes: 
+            status = {"message" : "slave_SAE_ID not found in this host"}
+            return (False, status)
     
     # get all streams that have a reserved_key matching one of the requested one
     stream_collection = mongo_client[mongodb['db']]['key_streams']
@@ -353,7 +355,7 @@ def check_mongo_init() -> bool:
     try: 
         test_mongo_client.list_database_names() 
         return True
-    except: 
+    except Exception: 
         return False 
     
 

@@ -32,22 +32,22 @@ dims = {
 
 class lsaPacket() :
     def __init__(self, version, nAdj, ptype = None, srcID = None, srcIP = None, srcPort = None, ids = None, costs = None, time = 0.0, options = None, auth = None): 
-        self.version = version 
-        self.type = ptype  
-        self.srcID = srcID 
-        self.srcIP = srcIP 
-        self.srcPort = srcPort 
-        self.nAdj = nAdj 
-        self.ids = ids 
-        self.costs = costs
-        self.time = time 
+        self.version : int = version 
+        self.type : str = ptype  
+        self.srcID : str = srcID 
+        self.srcIP : str= srcIP 
+        self.srcPort : int = srcPort 
+        self.nAdj : int = nAdj 
+        self.ids : list = ids 
+        self.costs : list = costs
+        self.time : str = time 
 
         if version == 2:
             self.auth = auth 
             self.options = options 
 
 
-    def get_dimension(self):
+    def get_dimension(self) -> int:
         version = self.version
         pdim = 0
 
@@ -62,7 +62,7 @@ class lsaPacket() :
         return pdim 
     
     
-    def decode(self, rawbytes) :
+    def decode(self, rawbytes : bytearray) -> None:
         start = 0 
         version =self.version 
 
@@ -96,7 +96,7 @@ class lsaPacket() :
             self.options = rawbytes[start:start + dims[version]['options']].decode().replace('\0', '')
         
 
-    def encode(self) : 
+    def encode(self) -> bytes : 
         version =self.version
         if self.nAdj != len(self.ids):
             return None 
@@ -179,7 +179,7 @@ class lsaPacket() :
 
         return b
 
-    def __str__(self):
+    def __str__(self) -> str:
         s = f'version : {self.version} | type : {self.type}  | nAdj : {self.nAdj} | srcID = {self.srcID} | srcAddress = {self.srcIP}:{self.srcPort} |time = {self.time} | IDs : {self.ids} | costs : {self.costs} |'
         if self.version == 2 :
             s += f' \n | auth : {self.auth} | \n options : {self.options}' 

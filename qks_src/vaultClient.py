@@ -42,21 +42,21 @@ class Client() :
         try: 
             self.client.auth.approle.login(role_id=role_id, secret_id=secret_id) 
             return True
-        except: 
+        except Exception: 
             return False
 
     def createEngine(self, path) : 
         try:
             self.client.sys.enable_secrets_engine(backend_type='kv', path=path, options={'version':1})
             return True
-        except: 
+        except Exception: 
             return False 
 
     def disableEngine(self, path) : 
         try:
             response = self.client.sys.disable_secrets_engine(path=path)
             return True
-        except: 
+        except Exception: 
             return False 
 
     def writeOrUpdate(self, mount, path, data) : 
@@ -64,7 +64,7 @@ class Client() :
             try: 
                 answer = self.client.secrets.kv.v1.create_or_update_secret(mount_point=mount, path=path, secret=data)
                 return True
-            except: 
+            except Exception: 
                 return False
         
     def readAndRemove(self, mount, path, id=None) : 
@@ -82,7 +82,7 @@ class Client() :
                 self.client.secrets.kv.v1.create_or_update_secret(mount_point=mount, path=path, secret=data['data'])
 
             return ret
-        except: 
+        except Exception: 
             return None 
     
     def createUser(self, id): 
@@ -105,5 +105,5 @@ class Client() :
             response["role_id"] = self.client.auth.approle.read_role_id(role_name='module1')["data"]["role_id"]
             response["secret_id"] = self.client.auth.approle.generate_secret_id(role_name='module1')["data"]["secret_id"]
             return response
-        except: 
+        except Exception: 
             return None

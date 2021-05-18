@@ -14,7 +14,7 @@ prefix = "/api/v1"
 @app.route(prefix+"/keys/<slave_SAE_ID>/status", methods=['GET'])
 def getStatus(slave_SAE_ID):
     slave_SAE_ID = str(slave_SAE_ID)
-    master_SAE_ID = "SAE21" # get it from authentication! 
+    master_SAE_ID = None # get it from authentication! 
     status, value = api.getStatus(slave_SAE_ID, master_SAE_ID)
     if status: 
         return value, 200
@@ -47,13 +47,13 @@ def getKey(slave_SAE_ID):
 
 @app.route(prefix+"/keys/<master_SAE_ID>/dec_keys", methods=['POST'])
 def getKeyWithKeyIDs(master_SAE_ID):
-    slave_SAE_ID = "SAE21" # get it from authentication! 
+    slave_SAE_ID = None # get it from authentication! 
     master_SAE_ID = str(master_SAE_ID)
-    content = request.get_json()
+    content = request.get_json() 
     if (type(content) is dict) : 
         if 'key_IDs' in content and type(content['key_IDs']) is list:         
             key_IDs = content['key_IDs']
-            status, value = api.getKeyWithKeyIDs(master_SAE_ID, slave_SAE_ID, key_IDs)
+            status, value = api.getKeyWithKeyIDs(master_SAE_ID, key_IDs, slave_SAE_ID)
             if status: 
                 return value, 200
             else: 
@@ -164,7 +164,6 @@ def unregisterQKDM(qkdm_ID):
 # EXTERNAL INTERFACE 
 @app.route(prefix+"/keys/<master_SAE_ID>/reserve", methods=['POST'])
 def reserveKeys(master_SAE_ID):  
-    # TODO: api function
     master_SAE_ID = str(master_SAE_ID)
     content = request.get_json()
     if (type(content) is dict) and all (k in content for k in ('key_stream_ID', 'slave_SAE_ID', 'key_lenght', 'key_ID_list')):
@@ -241,7 +240,7 @@ def main() :
             serverPort = int(sys.argv[1])
             if (serverPort < 0 or serverPort > 2**16 - 1):
                 raise Exception
-        except: 
+        except Exception: 
             print("ERROR: use 'python3 appname <port>', port must be a valid port number")
 
     # check db init 
