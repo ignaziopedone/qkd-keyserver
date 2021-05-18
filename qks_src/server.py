@@ -116,8 +116,6 @@ def setPreference(preference) :
 
 @app.route(prefix+"/qkdms/<qkdm_ID>/streams", methods=['POST'])
 def startQKDMStream(qkdm_ID) : 
-    # TODO: api function
-    status = 200
     qkdm_ID = str(qkdm_ID)
     status, value = api.startQKDMStream(qkdm_ID)
     if status: 
@@ -127,11 +125,12 @@ def startQKDMStream(qkdm_ID) :
 
 @app.route(prefix+"/qkdms/<qkdm_ID>/streams", methods=['DELETE'])
 def deleteQKDMStreams(qkdm_ID) : 
-    # TODO: api function
-    status = 200
     qkdm_ID = str(qkdm_ID)
-    value = f"deleted all streams on module {qkdm_ID} "
-    return value, status
+    status, value = api.deleteQKDMStreams(qkdm_ID)
+    if status: 
+        return value, 200
+    else: 
+        return value, 400
 
 # SOUTHBOUND INTERFACE 
 @app.route(prefix+"/qkdms/<qkdm_ID>", methods=['POST'])
@@ -219,13 +218,13 @@ def createStream():
     value = {'message' : "error: invalid content"}
     return value, 500
         
-@app.route(prefix+"/streams/<stream_ID>", methods=['DELETE'])
-def closeStream(stream_ID): 
-    stream_ID = str(stream_ID)
+@app.route(prefix+"/streams/<key_stream_ID>", methods=['DELETE'])
+def closeStream(key_stream_ID): 
+    key_stream_ID = str(key_stream_ID)
     content = request.get_json() 
     if (type(content) is dict) and ('source_qks_ID' in content) and type(content['source_qks_ID']) is str:
         source_qks_ID = content['source_qks_ID']
-        status, value = api.closeStream(stream_ID, source_qks_ID)
+        status, value = api.closeStream(key_stream_ID, source_qks_ID)
         if status: 
             return value, 200
         else: 

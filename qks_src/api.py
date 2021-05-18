@@ -62,7 +62,7 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple :
         }
         stored_key_count = 0 
         key_stream_collection = mongo_client[mongodb['db']]['key_streams']
-        key_streams = key_stream_collection.find({"dest_qks" : dest_qks['_id']})
+        key_streams = key_stream_collection.find({"dest_qks.id" : dest_qks['_id']})
         
         if key_streams.count() !=0:
             for stream in key_streams: 
@@ -101,9 +101,13 @@ def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str = None) 
         me = qks_collection.find_one({"_id" : qks['id']})
         my_saes = me['connected_sae']
         if slave_SAE_ID not in my_saes: 
-            status = {"message" : "slave_SAE_ID not found in this host"}
+            status = {"message" : "ERROR: slave_SAE_ID not found in this host"}
             return (False, status)
     
+    if len(key_IDs) > qks['max_key_per_request']: 
+        status = {"message" : f"ERROR: number of key per request limited to { qks['max_key_per_request']}"}
+        return (False, status)   
+
     # get all streams that have a reserved_key matching one of the requested one
     stream_collection = mongo_client[mongodb['db']]['key_streams']
     query = {"reserved_keys" : {"$elemMatch" : {"sae" : master_SAE_ID, "AKID" : {"$in" : key_IDs}}}}
@@ -187,16 +191,23 @@ def setPreference(preference:str, value) :
     return 
 
 def startQKDMStream(qkdm_ID:str) : 
+    # TODO: interaction with QKDM and REDIS
     global mongo_client
     if mongo_client is None:
         mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
     qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']  
     qkdm_collection = mongo_client[mongodb['db']]['qkd_modules']  
     key_stream_collection = mongo_client[mongodb['db']]['key_streams'] 
+    
 
     qkdm = qkdm_collection.find_one({"_id" : qkdm_ID})
     if qkdm is None: 
         status = {"message" : "ERROR: this qkdm is not registered on this host! "}
+        return (False, status)
+
+    qkdm_stream = key_stream_collection.find_one({"qkdm.id" : qkdm_ID})
+    if qkdm_stream is not None: 
+        status = {"message" : "ERROR: there is already an active stream for this qkdm. This QKS version only allows 1 stream per qkdm "}
         return (False, status)
     
     qkdm_address = qkdm['address']['ip']
@@ -226,22 +237,60 @@ def startQKDMStream(qkdm_ID:str) :
     
     # everything ok: insert the stream in the db 
     in_qkdm = {"id" : qkdm['_id'], "address" : qkdm['address']}
+    in_qks = {"id" :  dest_qks['_id'], "address" : dest_qks['address']}
     stream = {"_id" : key_stream_ID+"a", 
-        "dest_qks" : dest_qks['_id'], 
+        "dest_qks" : in_qks, 
         "standard_key_size" : qkdm['parameters']['standard_key_size'], 
         "reserved_keys" : [], 
         "qkdm" : in_qkdm
     }
     key_stream_collection.insert_one(stream)
-
-    status = {"message" : f"OK: stream {key_stream_ID}started successfully"}
+    # PUSH TO REDIS 
+    status = {"message" : f"OK: stream {key_stream_ID} started successfully"}
     return (True, status)
         
- 
-
-# TODO
 def deleteQKDMStreams(qkdm_ID:str) : 
-    return 
+    # TODO: interaction with QKDM and REDIS 
+    global mongo_client
+    if mongo_client is None:
+        mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
+    key_stream_collection = mongo_client[mongodb['db']]['key_streams'] 
+    
+    stream = key_stream_collection.find_one({"qkdm.id" : qkdm_ID})
+    if stream is None: 
+        status = {"message" : "There are no active stream for this QKDM on this host "}
+        return (False, status)
+    key_stream_ID = stream["_id"]
+    key_stream_ID_s = key_stream_ID[:-1]
+        
+    delete_data = {
+        'source_qks_ID' : qks['id'],
+        'key_stream_ID' : key_stream_ID
+    }
+
+    # call closeStream on the peer qks 
+    dest_qks_ip = stream['dest_qks']['address']['ip']
+    dest_qks_port = int(stream['dest_qks']['address']['port'])
+    response = requests.delete(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/streams/{key_stream_ID_s}", json=delete_data)
+     
+    if response.status_code != 200 :
+        status = {"message" : "ERROR: peer QKS unable to close the stream", 
+        "peer_message" : response.text}
+        return (False, status)
+    
+    qkdm_address = stream['qkdm']['address']['ip']
+    qkdm_port = stream['qkdm']['address']['port']
+    # call CLOSE on the found QKDM 
+    res = 0
+
+    key_stream_collection.delete_one({"_id" : key_stream_ID})
+    # push to REDIS 
+    if res == 0:
+        status = {"message" : f"OK: stream {key_stream_ID} closed successfully"}
+    else: 
+        status = {"message" : f"FORCED CLOSURE: stream {key_stream_ID} closed by peer, qkdm is unable to close it but this ID is not valid anymore"}
+    return (True, status)
+
 
 # SOUTHBOUND 
 # TODO
@@ -259,6 +308,10 @@ def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_leng
         mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
     qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']  
     key_stream_collection = mongo_client[mongodb['db']]['key_streams']
+
+    if (key_lenght > qks['max_key_size']) or (key_lenght < qks['min_key_size']) : 
+        status = {"message" : "ERROR: requested key size doesn't match this host parameters. Use getStatus to get more information"}
+        return (False, status)
 
     me = qks_collection.find_one({"_id" : qks['id'], "connected_sae" : slave_SAE_ID})
     if me is None: 
@@ -342,7 +395,8 @@ def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qkdm_id:
         return (False, "ERROR: Indirect stream not implemented yet")
 
     elif stream_type == "direct" and type(qkdm_id) is str:
-        if qks_collection.find_one({"_id" : source_qks_ID}) is None or stream_collection.find_one({"_id": key_stream_ID }) is not None:
+        source_qks = qks_collection.find_one({"_id" : source_qks_ID})
+        if  source_qks is None or stream_collection.find_one({"_id": key_stream_ID }) is not None:
             value = {'message' : "ERROR: invalid qks_ID or stream_ID"}
             return (False, value)
         
@@ -352,7 +406,8 @@ def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qkdm_id:
             ret_val = 0
             if ret_val == 0: 
                 in_qkdm = {"id" : selected_qkdm['_id'], "address" : selected_qkdm['address']}
-                new_stream = {"_id" : key_stream_ID, "dest_qks" : source_qks_ID, "reserved_keys" : [], "qkdm" : in_qkdm, "standard_key_size" : selected_qkdm['parameters']['standard_key_size']}
+                dest_qks = {"id" : source_qks_ID, "address" : source_qks['address']}
+                new_stream = {"_id" : key_stream_ID, "dest_qks" : dest_qks, "reserved_keys" : [], "qkdm" : in_qkdm, "standard_key_size" : selected_qkdm['parameters']['standard_key_size']}
                 stream_collection.insert_one(new_stream)
                 value = {'message' : "stream successfully created"}
                 return (True, value)
@@ -365,13 +420,13 @@ def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qkdm_id:
         return (False, value)
 
 
-def closeStream(stream_ID:str, source_qks:str) -> tuple:
+def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple:
     global mongo_client
     if mongo_client is None:
         mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
     stream_collection = mongo_client[mongodb['db']]['key_streams']
     
-    stream =  stream_collection.find_one({"_id" : stream_ID, "dest_qks" : source_qks}) 
+    stream =  stream_collection.find_one({"_id" : key_stream_ID, "dest_qks.id" : source_qks_ID}) 
     if stream is None:
         value = {'message' : "ERROR: invalid qks_ID or stream_ID"}
         return (False, value)
@@ -381,7 +436,7 @@ def closeStream(stream_ID:str, source_qks:str) -> tuple:
         # call close on the specified qkdm 
         ret_val = 0
         if ret_val == 0: 
-            stream_collection.delete_one({"_id" : stream_ID})
+            stream_collection.delete_one({"_id" : key_stream_ID})
             value = {'message' : "stream successfully closed"}
             return (True, value)
         else: 
