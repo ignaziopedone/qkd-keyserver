@@ -6,13 +6,14 @@ GET http://172.22.152.145:4000/api/v1/keys/SAE31/status HTTP/1.1
 content-type: application/json
 
 ### 
-POST http://172.22.152.145:4000/api/v1/keys/saeID/enc_keys HTTP/1.1
+## getKey
+POST http://172.22.152.145:4000/api/v1/keys/SAE22/enc_keys HTTP/1.1
 content-type: application/json
 
 {
-    "size" : 256, 
-    "number" : 3,
-    "extension_mandatory" : []
+    "master_SAE_ID" : "SAE11",
+    "size" : 509, 
+    "number" : 2
 }
 
 ### 

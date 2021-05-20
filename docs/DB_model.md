@@ -82,7 +82,7 @@
 			"AKID" : "String (uuid4)",
 			"sae" : "String",  
 			"kids" : ["Integer", "..."] ,
-			"chunks" : "Integer"
+			"key_length" : "Integer"
 			} ,
 			"..."
 		],
