@@ -11,31 +11,32 @@ class Sae() :
         self.nodeid : str = node
 
 class Node() : 
+    adjacent : dict = {}
+    saes : list = []
+
     def __init__(self, id: str): 
         self.id : str = id
-        self.adjacent : dict = {}
-        self.saes : list = []
 
 
-    def add_neighbor(self, neighbor : Node , cost : float) -> bool:
+    def add_neighbor(self, neighbor , cost : float) -> bool:
         if neighbor not in self.adjacent and neighbor.id != self.id : 
             self.adjacent[neighbor] = cost 
             return True
         return False 
 
-    def remove_neighbor(self, neighbor : Node) -> bool: 
+    def remove_neighbor(self, neighbor) -> bool: 
         if neighbor not in self.adjacent: 
             return False
         self.adjacent.pop(neighbor)
         return True
 
-    def remove_sae(self, sae : Sae) -> bool: 
+    def remove_sae(self, sae : 'Sae') -> bool: 
         if sae in self.saes :
             self.saes.remove(sae)
             return True
         return False 
     
-    def add_sae(self, sae: Sae) -> bool:
+    def add_sae(self, sae: 'Sae') -> bool:
         if sae not in self.saes: 
             self.saes.append(sae) 
             return True 
@@ -53,10 +54,10 @@ class Node() :
             sl.append(s.id)
         return sl
     
-    def get_cost(self, neighbor : Node) -> float:
+    def get_cost(self, neighbor: 'Node') -> float:
        return self.adjacent[neighbor]  if neighbor in self.adjacent else sys.maxsize
     
-    def update_cost (self, neighbor : Node, cost : float) -> bool: 
+    def update_cost (self, neighbor: 'Node', cost : float) -> bool: 
         if neighbor in self.adjacent: 
             if self.adjacent[neighbor] != cost:
                 self.adjacent[neighbor] = cost
@@ -78,22 +79,21 @@ class Table() :
         return f'| dest : {self.dest} | next : {self.next} | len : {self.len} | cost : {self.cost}'
 
 class Graph:
+    node_dict : dict = {}
+    sae_dict : dict = {} 
+    num_links : int = 0
+    routing_tables : dict = {}
+    start = None 
+    distance : dict = {}       
+    visited : dict = {}  
+    previous : dict = {}
+
     def __init__(self, nodes : list):
-        self.node_dict : dict = {}
-        self.sae_dict : dict = {} 
-        self.num_links : int = 0
-
-        self.lock = {'sae' : Lock(), 'node' : Lock() }  
-        self.routing_tables : dict = {}
-        self.start = None 
-        self.distance : dict = {}       
-        self.visited : dict = {}  
-        self.previous : dict = {}
-
         for n in nodes : 
             self.add_node(n)
+        self.lock = {'sae' : Lock(), 'node' : Lock() }  
 
-    def add_node(self, node : str) -> Node:
+    def add_node(self, node : str) -> 'Node':
         with self.lock['node']:
             if node not in self.node_dict: 
                 new_node = Node(node)
@@ -101,7 +101,7 @@ class Graph:
                 return new_node
             return None
 
-    def add_sae(self, sae : str, node: str) -> Sae:
+    def add_sae(self, sae : str, node: str) -> 'Sae':
         with self.lock['sae']:
             if sae not in self.sae_dict: 
                 new_sae = Sae(sae, node)
@@ -110,7 +110,7 @@ class Graph:
                     return new_sae
             return None
 
-    def get_node(self, k : str) -> Node: 
+    def get_node(self, k : str) -> 'Node': 
         with self.lock['node']: 
             if k in self.node_dict:
                 return self.node_dict[k]

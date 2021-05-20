@@ -88,8 +88,7 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple :
         status = {"message" : "slave_SAE_ID not found in this qkd network"}
         return (False, status)   
 
-# TODO
-def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : int = None, extensions = None ) :
+def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : int = None, extensions = None ) -> tuple :
     # TODO: check indexes and require keys to qkdm
     # TODO: REPLACE DB LOOKUP FOR DEST_QKS WITH ROUTING TABLES 
     global mongo_client
@@ -231,7 +230,6 @@ def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : 
     key_stream_collection.update_one({"_id" : key_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : {"$in" : used_AKIDs}}}})
     return (True, res)
         
-
 def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str = None) -> tuple :
     # TODO: require single keys (indexes) to qkdms
     global mongo_client
@@ -333,7 +331,7 @@ def getPreferences() :
 def setPreference(preference:str, value) : 
     return 
 
-def startQKDMStream(qkdm_ID:str) : 
+def startQKDMStream(qkdm_ID:str) -> tuple : 
     # TODO: interaction with QKDM and REDIS
     global mongo_client
     if mongo_client is None:
@@ -392,7 +390,7 @@ def startQKDMStream(qkdm_ID:str) :
     status = {"message" : f"OK: stream {key_stream_ID} started successfully"}
     return (True, status)
         
-def deleteQKDMStreams(qkdm_ID:str) : 
+def deleteQKDMStreams(qkdm_ID:str) -> tuple : 
     # TODO: interaction with QKDM and REDIS 
     global mongo_client
     if mongo_client is None:
@@ -445,7 +443,7 @@ def unregisterQKDM(qkdm_ID:str):
     return 
 
 # EXTERNAL 
-def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_length:int, key_ID_list:list): 
+def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_length:int, key_ID_list:list) -> tuple: 
     global mongo_client
     if mongo_client is None:
         mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
@@ -518,11 +516,9 @@ def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_leng
         status = {"message" : "keys reserved correctly!  "}
         return (True, status)
 
-
 # TODO
 def forwardData(data, decryption_key_id:str, decryption_key_stream:str): 
     return 
-
 
 def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qkdm_id:str=None) -> tuple:
     global mongo_client
@@ -561,7 +557,6 @@ def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qkdm_id:
     else: 
         value = {'message' : "ERROR: invalid stream type or qkdm_id"}
         return (False, value)
-
 
 def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple:
     global mongo_client
