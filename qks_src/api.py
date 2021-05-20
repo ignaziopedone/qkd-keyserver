@@ -21,8 +21,6 @@ mongodb = {
 
 qks = {
     'id' : prefs['qks']['KME_ID'],
-    'def_key_size' : prefs['qks']['DEF_KEY_SIZE'],
-    'max_key_count' : prefs['qks']['MAX_KEY_COUNT'],
     'max_key_per_request' : prefs['qks']['MAX_KEY_PER_REQUEST'],
     'max_key_size' : prefs['qks']['MAX_KEY_SIZE'],
     'min_key_size' : prefs['qks']['MIN_KEY_SIZE'],
@@ -38,6 +36,8 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple :
     if mongo_client is None:
         mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
     qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']
+    key_stream_collection = mongo_client[mongodb['db']]['key_streams']
+    qkdm_collection = mongo_client[mongodb['db']]['qkd_modules']
 
     # check that master_SAE is registered to this qks
     if master_SAE_ID is not None:
@@ -47,7 +47,7 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple :
             status = {"message" : "master_SAE_ID not registered on this host"}
             return (False, status)
     
-
+    # TAKE THIS FROM REDIS 
     dest_qks = qks_collection.find_one({ "connected_sae": slave_SAE_ID }) 
     # if slave_SAE is present in this qkd network
     if dest_qks is not None: 
@@ -57,18 +57,16 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple :
             'target_KME_ID': dest_qks['_id'],
             'master_SAE_ID': master_SAE_ID,
             'slave_SAE_ID': slave_SAE_ID,
-            'key_size': int(dest_qks['qos']['DEF_KEY_SIZE']),
-            'max_key_count': int(dest_qks['qos']['MAX_KEY_COUNT']),
-            'max_key_per_request': int(min(dest_qks['qos']['MAX_KEY_PER_REQUEST'], qks['max_key_per_request'])),
-            'max_key_size': int(min(dest_qks['qos']['MAX_KEY_SIZE'], qks['max_key_size'])),
-            'min_key_size': int(max(dest_qks['qos']['MIN_KEY_SIZE'], qks['min_key_size'])),
+            'max_key_per_request': int(qks['max_key_per_request']),
+            'max_key_size': int(qks['max_key_size']),
+            'min_key_size': int(qks['min_key_size']),
             'max_SAE_ID_count': 0
         }
 
         res['connection_type'] = "direct"
 
         stored_key_count = 0 
-        key_stream_collection = mongo_client[mongodb['db']]['key_streams']
+
         qkdm_exist = True if res['connection_type'] == "direct" else False 
         key_stream = key_stream_collection.find_one({"dest_qks.id" : dest_qks['_id'], "qkdm" : {"$exists" : qkdm_exist}})
         
@@ -76,9 +74,12 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple :
             module = key_stream['qkdm']
             # ask available keys to module
             stored_key_count += int(0)
-            
-            res['stored_key_count'] = stored_key_count if stored_key_count < res['max_key_count'] else res['max_key_count']
+            res['key_size'] = key_stream['standard_key_size']
+            res['stored_key_count'] = stored_key_count 
             return (True, res )
+            if qkdm_exist: 
+                qkdm = qkdm_collection.find({"_id" : key_stream['qkdm']['id']})
+                res['max_key_count'] = qkdm['parameters']['max_key_count']
         else: 
             # no stream available. Try to open an indirect connection
             status = {"message" : "ERROR: This sae is connected but is unreachable: no direct connections are available"}
