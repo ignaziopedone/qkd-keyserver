@@ -24,23 +24,19 @@ def getStatus(slave_SAE_ID):
 
 @app.route(prefix+"/keys/<slave_SAE_ID>/enc_keys", methods=['POST'])
 def getKey(slave_SAE_ID):
-    # TODO: api function
     slave_SAE_ID = str(slave_SAE_ID)
+    master_SAE_ID = None # get it from authentication! 
     content = request.get_json()
-    if (type(content) is dict) : 
+    if (type(content) is dict) and 'master_SAE_ID' in content and type(content['master_SAE_ID']) is str: 
+        master_SAE_ID = content['master_SAE_ID'] # TO BE REMOVED
         number =content['number'] if 'number' in content and type(content['number']) is int else 1
         key_size = content['size'] if 'size' in content and type(content['size']) is int else None
         extension_mandatory = content['extension_mandatory'] if 'extension_mandatory' in content else None
-        extension_optional = content['extension_optional'] if 'extension_optional' in content else None
-        #call function
-        status = 200
-        value = {
-            'keys' : [
-            {'key_ID' : "id1", 'key' : "key1"}, 
-            {'key_ID' : "id2", 'key' : "key2"}, 
-        ]}
-
-        return value, status
+        status, value = api.getKey(slave_SAE_ID, master_SAE_ID, number, key_size, extension_mandatory)
+        if status: 
+            return value, 200
+        else: 
+            return value, 400
     else:
         value = {'message' : "bad request: request does not contains a valid json object"}
         return value, 500 
@@ -105,6 +101,7 @@ def getPreferences() :
 @app.route(prefix+"/preferences/<preference>", methods=['PUT'])
 def setPreference(preference) : 
     # TODO: api function
+    # PREFERENCES SAVED IN REDIS DUE TO CONSISTENCY
     content = request.get_json()
     if (type(content) is dict) and ('preference' in content) and ('value' in content):
         if preference == content['preference']: 
@@ -168,14 +165,14 @@ def unregisterQKDM(qkdm_ID):
 def reserveKeys(master_SAE_ID):  
     master_SAE_ID = str(master_SAE_ID)
     content = request.get_json()
-    if (type(content) is dict) and all (k in content for k in ('key_stream_ID', 'slave_SAE_ID', 'key_lenght', 'key_ID_list')):
+    if (type(content) is dict) and all (k in content for k in ('key_stream_ID', 'slave_SAE_ID', 'key_length', 'key_ID_list')):
         if (type( content['key_ID_list']) is list): 
             key_stream_ID = content['key_stream_ID']
             slave_SAE_ID = content['slave_SAE_ID']
-            key_lenght = int(content['key_lenght'])
+            key_length = int(content['key_length'])
             key_ID_list = content['key_ID_list']
 
-            status, value = api.reserveKeys(master_SAE_ID, slave_SAE_ID, key_stream_ID, key_lenght, key_ID_list)
+            status, value = api.reserveKeys(master_SAE_ID, slave_SAE_ID, key_stream_ID, key_length, key_ID_list)
             if status: 
                 return value, 200
             else: 

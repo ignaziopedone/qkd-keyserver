@@ -3,6 +3,8 @@ import vaultClient
 from pymongo import MongoClient
 import yaml
 import requests 
+from math import ceil
+from uuid import uuid4
 
 config_file = open("qks_src/config.yaml", 'r')
 prefs = yaml.safe_load(config_file)
@@ -31,6 +33,7 @@ qks = {
 # NORTHBOUND 
 def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple : 
     # TODO : request available keys to qkdms 
+    # TODO: REPLACE DB LOOKUP FOR DEST_QKS WITH ROUTING TABLES  
     global mongo_client
     if mongo_client is None:
         mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
@@ -44,6 +47,7 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple :
             status = {"message" : "master_SAE_ID not registered on this host"}
             return (False, status)
     
+
     dest_qks = qks_collection.find_one({ "connected_sae": slave_SAE_ID }) 
     # if slave_SAE is present in this qkd network
     if dest_qks is not None: 
@@ -57,21 +61,23 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple :
             'max_key_count': int(dest_qks['qos']['MAX_KEY_COUNT']),
             'max_key_per_request': int(min(dest_qks['qos']['MAX_KEY_PER_REQUEST'], qks['max_key_per_request'])),
             'max_key_size': int(min(dest_qks['qos']['MAX_KEY_SIZE'], qks['max_key_size'])),
-            'min_key_size': int(max(dest_qks['qos']['MIN_KEY_SIZE'], qks['max_key_size'])),
-            'max_SAE_ID_count': int(min(dest_qks['MAX_SAE_ID_COUNT'], qks['max_sae_id_count']) if 'MAX_SAE_ID_COUNT' in dest_qks else 0)
+            'min_key_size': int(max(dest_qks['qos']['MIN_KEY_SIZE'], qks['min_key_size'])),
+            'max_SAE_ID_count': 0
         }
+
+        res['connection_type'] = "direct"
+
         stored_key_count = 0 
         key_stream_collection = mongo_client[mongodb['db']]['key_streams']
-        key_streams = key_stream_collection.find({"dest_qks.id" : dest_qks['_id']})
+        qkdm_exist = True if res['connection_type'] == "direct" else False 
+        key_stream = key_stream_collection.find_one({"dest_qks.id" : dest_qks['_id'], "qkdm" : {"$exists" : qkdm_exist}})
         
-        if key_streams.count() !=0:
-            for stream in key_streams: 
-                module = stream['qkdm']
-                # ask available keys to module
-                av_k = 0
-                stored_key_count += av_k
+        if key_stream is not None:
+            module = key_stream['qkdm']
+            # ask available keys to module
+            stored_key_count += int(0)
             
-            res['stored_key_count'] = stored_key_count
+            res['stored_key_count'] = stored_key_count if stored_key_count < res['max_key_count'] else res['max_key_count']
             return (True, res )
         else: 
             # no stream available. Try to open an indirect connection
@@ -83,11 +89,148 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple :
         return (False, status)   
 
 # TODO
-def getKey(slave_SAE_ID: str , master_SAE_ID : str = None, number : int =1, key_size : int = None) :
+def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : int = None, extensions = None ) :
+    # TODO: check indexes and require keys to qkdm
+    # TODO: REPLACE DB LOOKUP FOR DEST_QKS WITH ROUTING TABLES 
+    global mongo_client
+    if mongo_client is None:
+        mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
+    qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']
+    key_stream_collection = mongo_client[mongodb['db']]['key_streams']
+
     if key_size is None: 
-        key_size = qks['def_key_size']
-    keys = {'keys' : []}
-    return keys
+        key_size = qks['def_key_size'] 
+    elif key_size > qks['max_key_size'] or key_size < qks['min_key_size'] : 
+        status = {"message" : "ERROR: please respect key size limits: check them with getStatus function"}
+        return (False, status) 
+
+    if number > qks['max_key_per_request'] : 
+        status = {"message" : "ERROR: please respect max_key_per_request limit: check it with getStatus function"}
+        return (False, status) 
+
+
+    me = qks_collection.find_one({"_id" : qks['id'], "connected_sae" : master_SAE_ID})
+    if me is None: 
+        status = {"message" : "ERROR: master_SAE_ID not found on this host"}
+        return (False, status)  
+
+    if extensions is not None:
+        if len(extensions) == 1 and 'require_direct' in extensions and type(extensions['require_direct'] ) is bool:
+            required_direct = extensions['require_direct'] 
+        else: 
+            status = {"message" : "invalid extensions! The only supported extension is require_direct with boolean value"}
+            return (False, status)
+         
+
+    # TAKE THIS FROM REDIS! 
+    dest_qks = qks_collection.find_one({"connected_sae" : slave_SAE_ID})
+    stream_type = "direct"
+
+    if dest_qks is None : 
+        status = {"message" : "ERROR: slave_SAE_ID not found on this network! "}
+        return (False, status) 
+
+    direct_stream = True if stream_type == "direct" else False 
+    if direct_stream is False and required_direct is True: 
+        status = {"message" : "ERROR: there are no direct connection available as required"}
+        return (False, status)
+
+    key_stream = key_stream_collection.find_one({"dest_qks.id" : dest_qks['_id'], "qkdm" : {"$exists" : direct_stream}})
+
+    if key_stream is None: 
+        status = {"message" : "ERROR: there are no streams to reach requeted SAE", 
+                    "details" : "indirect connection not implemented yet. Call getStatus before getKey to avoid this error"}
+        return (False, status)
+
+    # check available keys and save their ids inside stream.reserved_keys collection 
+    needed_keys = number
+    list_to_be_sent = []
+    used_AKIDs = []
+
+    chunks_for_each_key = int(ceil(float(key_size) / key_stream['standard_key_size'])  ) 
+    if 'qkdm' in key_stream:  
+        qkdm_id : key_stream['qkdm']['id']
+        qkmd_ip : key_stream['qkdm']['address']['ip']
+        qkdm_port : int(key_stream['qkdm']['address']['port'])
+        # require available ids to each qkdm 
+        status, kids = (0, ["chunk1", "chunk2", "chunk3", "chunk4"])
+        if status != 0 :
+            status =  {"message" : "ERROR: qkdm unable to answer"} 
+            return (False, status )
+
+        av_AKIDs = int(len(kids) / chunks_for_each_key)
+
+        
+        # RELAXED APPROACH : IF THERE ARE NOT ENOUGH AVAILABLE KEYS RETURN WHAT IS AVAILABLE
+        #if av_AKIDs < needed_keys: 
+        #    status =  {"message" : "ERROR: there are not enough available keys on this connection. Please try with a smaller number or call getStatus"} 
+        #    return (False, status )
+        
+        start = 0
+        for i in range(0, av_AKIDs): 
+            AKID = str(uuid4() )
+            AKID_kids = kids[start:(start + chunks_for_each_key)]
+            start += chunks_for_each_key 
+            # save reserved_keys_for_this_stream in the DB stream collection (reservedKeys)
+            # we suppose that uuid are generated uniquly, no need to check their uniqueness
+            element  = {'AKID' : AKID, 'sae' : slave_SAE_ID, 'kids' : AKID_kids}  
+            query =  {"_id" : key_stream['_id'], "reserved_keys" : {
+                "$not" : {
+                    "$elemMatch" :  {"kids" : {"$in" : AKID_kids}}
+                }        
+            }}
+ 
+            update = {"$push" : {"reserved_keys" : element}}
+            res = key_stream_collection.update_one(query, update)
+            if res.modified_count == 1: 
+                    needed_keys -= 1
+                    list_to_be_sent.append({'AKID' : AKID, 'kids' : AKID_kids})
+                    used_AKIDs.append(AKID)
+            
+            if needed_keys == 0: 
+                break 
+    else: 
+        # indirect stream not implemented yet
+        status =  {"message" : "ERROR: indirect stream not implemented yet"} 
+        return (False, status )
+
+    if len(list_to_be_sent) < 1 : 
+        status =  {"message" : "ERROR: unable to reserve any key"} 
+        return (False, status )
+
+
+    # send reserveKey(list_to_be_sent) requests to the peer qks
+    post_data = {
+        "key_stream_ID" : key_stream['_id'],
+        "slave_SAE_ID" : slave_SAE_ID, 
+        "key_length" : key_size,
+        "key_ID_list" : list_to_be_sent
+    }
+    dest_qks_ip = key_stream['dest_qks']['address']['ip']
+    dest_qks_port = int(key_stream['dest_qks']['address']['port'])
+    response = requests.post(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/keys/{master_SAE_ID}/reserve", json=post_data)
+    if response.status_code != 200: 
+        status = {"message" : "ERROR: peer qks unable to reserve keys", 
+        "peer_message" : str(response.text)}
+        key_stream_collection.update_one({"_id" : key_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : {"$in" : used_AKIDs}}}})
+        return (False, status)
+
+    res = {'keys' : [], 'key_container_extension' : {'direct_communication' : direct_stream, 'returned_keys' : len(list_to_be_sent)}}
+    # ask qkdm saved keys 
+    for element in list_to_be_sent: 
+        AKID = element['AKID']
+        kids = element['kids']
+        # perform request 
+        ret_status, chunks = (0, ["0d7uf5YGkQD8rNaC0TuXU01tHShzjpZkHdK6qX1hxnJ5WGi4gEw6xGGnvknKO3XfzJmk298U09uZLz6j4xv4ccxOhR6rC2KKKy4G5KGkpsCouWdPo0iTqcgXFK68o128", "0d7uf5YGkQD8rNaC0TuXU01tHShzjpZkHdK6qX1hxnJ5WGi4gEw6xGGnvknKO3XfzJmk298U09uZLz6j4xv4ccxOhR6rC2KKKy4G5KGkpsCouWdPo0iTqcgXFK68o256", "0d7uf5YGkQD8rNaC0TuXU01tHShzjpZkHdK6qX1hxnJ5WGi4gEw6xGGnvknKO3XfzJmk298U09uZLz6j4xv4ccxOhR6rC2KKKy4G5KGkpsCouWdPo0iTqcgXFK68o384", "0d7uf5YGkQD8rNaC0TuXU01tHShzjpZkHdK6qX1hxnJ5WGi4gEw6xGGnvknKO3XfzJmk298U09uZLz6j4xv4ccxOhR6rC2KKKy4G5KGkpsCouWdPo0iTqcgXFK509512"]) 
+        if ret_status != 0 : 
+            status = {"message" : "ABORT : THIS SHOULD NOT HAPPEN! there is someone else which is not this QKS that is using the QKDM!"}
+            return (False, status)
+        key = ''.join(chunks)[0:key_size]
+        res['keys'].append({'key_ID' : AKID, 'key' : key})
+        
+    key_stream_collection.update_one({"_id" : key_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : {"$in" : used_AKIDs}}}})
+    return (True, res)
+        
 
 def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str = None) -> tuple :
     # TODO: require single keys (indexes) to qkdms
@@ -98,10 +241,9 @@ def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str = None) 
 
     # check that slave_SAE is registered to this qks
     if slave_SAE_ID is not None:
-        me = qks_collection.find_one({"_id" : qks['id']})
-        my_saes = me['connected_sae']
-        if slave_SAE_ID not in my_saes: 
-            status = {"message" : "ERROR: slave_SAE_ID not found in this host"}
+        me = qks_collection.find_one({"_id" : qks['id'], "connected_sae" : slave_SAE_ID})
+        if me is None: 
+            status = {"message" : "ERROR: slave_SAE_ID not found on this host"}
             return (False, status)
     
     if len(key_IDs) > qks['max_key_per_request']: 
@@ -124,13 +266,14 @@ def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str = None) 
             if key['AKID'] in key_IDs and key['sae'] == master_SAE_ID:
                 # for each requested AKID require all its chunks and build the aggregate key
                 # TODO: require key['kids'] to modules 
+                key_length = key['key_length']
                 ret_status, returned_keys = (True, {"ind1" : "chunk1", "ind2" : "chunk2"})
                 if ret_status: 
                     # if a key is not available in the module it won't be returned but the other keys will be returned correctly
                     aggregate_key = ""
                     for val in returned_keys.values():
                         aggregate_key += val
-                    keys_to_be_returned['keys'].append({'key_ID' : key['AKID'], 'key' : aggregate_key})
+                    keys_to_be_returned['keys'].append({'key_ID' : key['AKID'], 'key' : aggregate_key[0:key_length]})
 
                     # remove akid from reserved keys
                     stream_collection.update_one({"_id" : stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : key['AKID']}}})
@@ -302,14 +445,14 @@ def unregisterQKDM(qkdm_ID:str):
     return 
 
 # EXTERNAL 
-def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_lenght:int, key_ID_list:list): 
+def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_length:int, key_ID_list:list): 
     global mongo_client
     if mongo_client is None:
         mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
     qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']  
     key_stream_collection = mongo_client[mongodb['db']]['key_streams']
 
-    if (key_lenght > qks['max_key_size']) or (key_lenght < qks['min_key_size']) : 
+    if (key_length > qks['max_key_size']) or (key_length < qks['min_key_size']) : 
         status = {"message" : "ERROR: requested key size doesn't match this host parameters. Use getStatus to get more information"}
         return (False, status)
 
@@ -327,11 +470,12 @@ def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_leng
     kids_to_be_checked = set()
     akids = set()
     for element in key_ID_list: 
-        if not('AKID' in element and 'kids' in element and type(element['kids']) is list) or (key_stream['standard_key_size']*len(element['kids']) != key_lenght): 
+        if not('AKID' in element and 'kids' in element and type(element['kids']) is list) or (key_stream['standard_key_size']*len(element['kids']) < key_length): 
             valid_list = False
             break
         else: 
-            element['sae'] : master_SAE_ID
+            element['sae'] = master_SAE_ID
+            element['key_length'] = key_length 
             kids_to_be_checked.update(element['kids'])
             akids.add(element['AKID'])
 
@@ -339,7 +483,7 @@ def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_leng
         status = {"message" : "ERROR: key_ID_list not properly formatted"}
         return (False, status)
     
-    kids_per_akid = int(key_lenght / key_stream['standard_key_size'])
+    kids_per_akid = int(ceil(float(key_length) / key_stream['standard_key_size'])  ) 
     if (len(akids) != len(key_ID_list)) or len(kids_to_be_checked)!= len(akids)*kids_per_akid : 
         status = {"message" : "ERROR: there are some duplication in AKIDs or kids received"}
         return (False, status) 
@@ -359,15 +503,14 @@ def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_leng
     query =  {"_id" : key_stream_ID, "reserved_keys" : {
         "$not" : {
             "$elemMatch" :  {"$or" : [
-                {"AKID" : {"$in" : akids}}, 
-                {"kids" : {"$in" : kids_to_be_checked}}]
+                {"AKID" : {"$in" : list(akids)}}, 
+                {"kids" : {"$in" : list(kids_to_be_checked)}}]
             }
         } 
     }}
  
     update = {"$push" : {"reserved_keys" : {"$each" : key_ID_list}}}
     res = key_stream_collection.update_one(query, update)
-    print(f"find: {res.matched_count} - updated : {res.modified_count}")
     if res.modified_count != 1:  
         status = {"message" : "ERROR: unable to reserve these keys due to AKID or kids duplication! "}
         return (False, status)
