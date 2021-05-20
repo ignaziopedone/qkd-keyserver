@@ -28,17 +28,7 @@
 		"String",
 		"..."
 	],
-	"static_route" : "String",
-	"route_expire_time" : "Integer",
-	"reaching_cost" : "Integer", 
-    "qos" : {
-    	"DEF_KEY_SIZE" : "Integer" , 
-		"MAX_KEY_COUNT" : "Integer" ,
-		"MAX_KEY_PER_REQUEST" : "Integer", 
-		"MAX_KEY_SIZE" : "Integer" , 
-		"MIN_KEY_SIZE" : "Integer" , 
-		"MAX_SAE_ID_COUNT" : "Integer" 
-    }
+	"static_route" : "String"
 }
 @endjson
 
