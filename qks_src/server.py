@@ -90,6 +90,7 @@ def unregisterSAE(SAE_ID):
     else: 
         return value, 400
 
+# TODO
 @app.route(prefix+"/preferences", methods=['GET'])
 def getPreferences() : 
     # TODO: api function
@@ -98,6 +99,7 @@ def getPreferences() :
     preferences = {'preferences': [{'preference1' : 'val1'}]}
     return preferences, status
 
+# TODO
 @app.route(prefix+"/preferences/<preference>", methods=['PUT'])
 def setPreference(preference) : 
     # TODO: api function
@@ -130,23 +132,26 @@ def deleteQKDMStreams(qkdm_ID) :
         return value, 400
 
 # SOUTHBOUND INTERFACE 
-@app.route(prefix+"/qkdms/<qkdm_ID>", methods=['POST'])
-def registerQKDM(qkdm_ID): 
-    # TODO: api function
+# TODO
+@app.route(prefix+"/qkdms", methods=['POST'])
+def registerQKDM(): 
     content = request.get_json()
-    if (type(content) is dict) and all (k in content for k in ('QKDM_ID', 'protocol', 'QKDM_IP', 'destination_QKS','max_key_count', 'key_size')):
-        if (qkdm_ID == content['QKDM_ID']):
-            QKDM_ID = content['QKDM_ID']
-            protocol = content['protocol']
-            QKDM_IP = content['QKDM_IP']
-            destination_qks = content['destination_QKS']
-            max_key_count = content['max_key_count']
-            key_size = content['key_size']
-            # call function 
-            status = 200
-            value = {'database_data' : {}, 'vault_data' : {}}
-
-            return value, status
+    if (type(content) is dict) and all (k in content for k in ('QKDM_ID', 'protocol', 'QKDM_IP', 'QKDM_port', 'reachable_QKS', 'reachable_QKDM','max_key_count', 'key_size')):
+        QKDM_ID = content['QKDM_ID'] if type(content['QKDM_ID']) is str else None
+        protocol = content['protocol'] if type(content['protocol']) is str else None
+        QKDM_IP = content['QKDM_IP'] if type(content['QKDM_IP']) is str else None
+        QKDM_port = content['QKDM_port'] if type(content['QKDM_port']) is int else None
+        reachable_qks = content['reachable_QKS'] if type(content['reachable_QKS']) is str else None
+        reachable_qkdm = content['reachable_QKDM'] if type(content['reachable_QKDM']) is str else None
+        max_key_count = content['max_key_count'] if type(content['max_key_count']) is int else None
+        key_size = content['key_size'] if type(content['key_size']) is int else None
+        
+        if all (el is not None for el in [QKDM_ID, protocol, QKDM_IP, QKDM_port, reachable_qks, reachable_qkdm, max_key_count, key_size]): 
+            status, value = api.registerQKDM(QKDM_ID, protocol, QKDM_IP, QKDM_port, reachable_qkdm, reachable_qks, max_key_count, key_size)
+            if status: 
+                return value, 200
+            else: 
+                return value, 400
 
     value = {'message' : "error: invalid content"}
     return value, 500
@@ -154,10 +159,11 @@ def registerQKDM(qkdm_ID):
 @app.route(prefix+"/qkdms/<qkdm_ID>", methods=['DELETE'])
 def unregisterQKDM(qkdm_ID): 
     qkdm_ID = str(qkdm_ID)
-    # call function
-    status = 200
-    value = f"delete qkdm {qkdm_ID}"
-    return value, status 
+    status, value = api.unregisterQKDM(qkdm_ID) 
+    if status: 
+        return value, 200
+    else: 
+        return value, 400 
 
 
 # EXTERNAL INTERFACE 
@@ -181,6 +187,7 @@ def reserveKeys(master_SAE_ID):
     value = {'message' : "error: invalid content"}
     return value, 500
 
+# TODO
 @app.route(prefix+"/forward", methods=['POST'])   
 def forwardData(): 
     # TODO: api function
@@ -245,12 +252,18 @@ def main() :
     # check db init 
     db_init = api.check_mongo_init() 
     if db_init: 
-        print("DB init successfully")
+        print("DB initialized successfully")
     else: 
         print("ERROR: unable to access DB")
         return 
 
     # check vault init
+    vault_init = api.check_vault_init() 
+    if vault_init: 
+        print("Vault initialized successfully")
+    else: 
+        print("ERROR: unable to access vault")
+        return 
 
     app.run(host='0.0.0.0', port=serverPort)
 

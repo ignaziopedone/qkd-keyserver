@@ -9,6 +9,7 @@ from uuid import uuid4
 config_file = open("qks_src/config.yaml", 'r')
 prefs = yaml.safe_load(config_file)
 mongo_client = None # once it has been initialized all APIs use the same client
+vault_client = None 
 
 mongodb = {
     'host' : prefs['mongo_db']['host'],
@@ -17,6 +18,12 @@ mongodb = {
     'password' : prefs['mongo_db']['password'],
     'auth_src' : prefs['mongo_db']['auth_src'],
     'db' : prefs['mongo_db']['db_name']
+}
+
+vault = {
+    'host' : prefs['vault']['host'],
+    'port' : prefs['vault']['port'], 
+    'token' : prefs['vault']['token']
 }
 
 qks = {
@@ -347,9 +354,9 @@ def startQKDMStream(qkdm_ID:str) -> tuple :
         status = {"message" : "ERROR: this qkdm is not registered on this host! "}
         return (False, status)
 
-    qkdm_stream = key_stream_collection.find_one({"qkdm.id" : qkdm_ID})
+    qkdm_stream = key_stream_collection.find_one({"dest_qks.id" : qkdm['reachable_qks'],  "qkdm" : {"$exists" : True}})
     if qkdm_stream is not None: 
-        status = {"message" : "ERROR: there is already an active stream for this qkdm. This QKS version only allows 1 stream per qkdm "}
+        status = {"message" : "ERROR: there is already an active direct stream to this destination. This QKS version only allows 1 direct stream between each QKS couple"}
         return (False, status)
     
     qkdm_address = qkdm['address']['ip']
@@ -435,13 +442,94 @@ def deleteQKDMStreams(qkdm_ID:str) -> tuple :
 
 
 # SOUTHBOUND 
-# TODO
-def registerQKDM(qkdm_ID:str, protocol:str, qkdm_ip:str, destination_qks:str, max_key_count:int, key_size:int): 
-    return 
+def registerQKDM(qkdm_ID:str, protocol:str, qkdm_ip:str, qkdm_port:int, reachable_qkdm: str, reachable_qks:str, max_key_count:int, key_size:int) -> tuple: 
+    global mongo_client, vault_client
+    if mongo_client is None:
+        mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
+    qkdms_collection = mongo_client[mongodb['db']]['qkd_modules'] 
+    
+    if vault_client is None: 
+        vault_client = vaultClient.Client(vault['host'], vault['port'], vault['token']) 
+        vault_client.connect()
 
-# TODO
-def unregisterQKDM(qkdm_ID:str): 
-    return 
+    if qkdm_port < 0 or qkdm_port > 65535: 
+        value = {'message' : "ERROR: invalid port number"}
+        return (False, value)
+
+    if qkdms_collection.find_one({"_id" : qkdm_ID}) is not None: 
+        value = {'message' : "ERROR: retrieving known qkdm data not supported yet"}
+        return (False, value)
+
+    qkdm_data = {"_id" : qkdm_ID, 
+                "address" : {"ip" : qkdm_ip, "port" : qkdm_port}, 
+                "reachable_qkdm" : reachable_qkdm, 
+                "reachable_qks" : reachable_qks, 
+                "protocol" : protocol, 
+                "parameters" : {"max_key_count" : max_key_count, "standard_key_size" : key_size}}
+    res = qkdms_collection.insert_one(qkdm_data)
+
+
+    res = vault_client.createUser(qkdm_ID)
+    if res is None : 
+        value = {'message' : "ERROR: unable to create a user for you in Vault"}
+        qkdms_collection.delete_one({"_id" : qkdm_ID})
+        return (False, value)
+
+    return_value = {}
+    return_value['vault_data'] = {
+        'ip_address' : vault['host'], 
+        'port' : vault['port'], 
+        'secret_engine' : qkdm_ID, 
+        'role_id' : res['role_id'], 
+        'secret_id' : res['secret_id'] } 
+
+
+    admin_db = mongo_client['admin'] 
+    password = str(uuid4()).replace("-", "")
+    username = qkdm_ID
+    admin_db.command("createUser", username, pwd = password, roles =  [{ 'role': 'readWrite', 'db': qkdm_ID }] )
+
+    return_value['database_data'] = {
+        'ip_address' : mongodb['host'], 
+        'port' :  mongodb['port'], 
+        'db_name' : qkdm_ID, 
+        'username' : username, 
+        'password' : password, 
+        'auth_src' : mongodb['auth_src']}
+
+    return (True, return_value)
+
+
+def unregisterQKDM(qkdm_ID:str) -> tuple: 
+    global mongo_client, vault_client
+    if mongo_client is None:
+        mongo_client = MongoClient(f"mongodb://{mongodb['user']}:{mongodb['password']}@{mongodb['host']}:{mongodb['port']}/{mongodb['db']}?authSource={mongodb['auth_src']}")
+    qkdms_collection = mongo_client[mongodb['db']]['qkd_modules'] 
+    
+    if vault_client is None: 
+        vault_client = vaultClient.Client(vault['host'], vault['port'], vault['token']) 
+        vault_client.connect()
+
+
+    if qkdms_collection.find_one({"_id" : qkdm_ID}) is None: 
+        value = {'message' : "ERROR: QKDM not found on this host"}
+        return (False, value)
+
+
+    res = vault_client.deleteUser(qkdm_ID)
+    if not res: 
+        value = {'message' : "ERROR: unable to delete vault accesses"}
+        return (False, value)
+
+    admin_db = mongo_client['admin'] 
+    admin_db.command("dropUser", qkdm_ID)
+    mongo_client.drop_database(qkdm_ID)
+
+    qkdms_collection.delete_one({"_id" : qkdm_ID})
+    
+
+    value = {'message' : "QKDM removed successfully"}
+    return (True, value) 
 
 # EXTERNAL 
 def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_length:int, key_ID_list:list) -> tuple: 
@@ -602,6 +690,12 @@ def check_mongo_init() -> bool:
         return True
     except Exception: 
         return False 
+
+def check_vault_init() -> bool : 
+    global vault_client
+    vault_client = vaultClient.Client(vault['host'], vault['port'], vault['token']) 
+    return vault_client.connect() 
+
     
 
 

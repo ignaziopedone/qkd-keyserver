@@ -11,6 +11,16 @@ services:
             MONGO_INITDB_ROOT_PASSWORD : rootpwd
             MONGO_INITDB_DATABASE: admin
 
-        
+    vault:
+        image: vault
+        container_name: vault_notls
+        ports:
+            - "8200:8200"
+        volumes:
+            - ./vault_config.json:/vault/config/vault_config.json
+        cap_add:
+            - IPC_LOCK
+        entrypoint: vault server -config=/vault/config/vault_config.json
+
     
     
