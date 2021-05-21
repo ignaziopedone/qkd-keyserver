@@ -670,7 +670,7 @@ def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple:
             value = {'message' : "ERROR in stream closure"}
             return (False, value)
     else: 
-        # close indired stream
+        # close indirect stream
         return (False, "not implemented yet") 
 
 

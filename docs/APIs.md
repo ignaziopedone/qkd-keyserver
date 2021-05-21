@@ -162,6 +162,7 @@
     "**registerQKDM request**":"",
     "QKDM_ID":"String",
     "QKDM_IP" : "String",
+    "QKDM_port" : "Integer", 
     "protocol" : "String",
     "max_key_count" : "Integer", 
     "key_size" : "Integer",
@@ -177,7 +178,8 @@
         "port" : "Integer", 
         "name" : "String",
         "username" : "String", 
-        "password" : "String"
+        "password" : "String",
+        "auth_src" : "String"
     },
     "vault_data" : {
         "ip_address" : "String",
