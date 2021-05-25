@@ -1,5 +1,5 @@
 
-import vaultClient
+from vaultClient import Client as VaultClient
 from pymongo import MongoClient
 import yaml
 import requests 
@@ -10,8 +10,8 @@ config_file = open("qks_src/config.yaml", 'r')
 prefs = yaml.safe_load(config_file)
 config_file.close()
 
-mongo_client = None # once it has been initialized all APIs use the same client
-vault_client = None 
+mongo_client : MongoClient = None # once it has been initialized all APIs use the same client
+vault_client : VaultClient = None 
 
 mongodb = {
     'host' : prefs['mongo_db']['host'],
@@ -451,7 +451,7 @@ def registerQKDM(qkdm_ID:str, protocol:str, qkdm_ip:str, qkdm_port:int, reachabl
     qkdms_collection = mongo_client[mongodb['db']]['qkd_modules'] 
     
     if vault_client is None: 
-        vault_client = vaultClient.Client(vault['host'], vault['port'], vault['token']) 
+        vault_client = VaultClient(vault['host'], vault['port'], vault['token']) 
         vault_client.connect()
 
     if qkdm_port < 0 or qkdm_port > 65535: 
@@ -509,7 +509,7 @@ def unregisterQKDM(qkdm_ID:str) -> tuple[bool, dict]:
     qkdms_collection = mongo_client[mongodb['db']]['qkd_modules'] 
     
     if vault_client is None: 
-        vault_client = vaultClient.Client(vault['host'], vault['port'], vault['token']) 
+        vault_client = VaultClient(vault['host'], vault['port'], vault['token']) 
         vault_client.connect()
 
 
@@ -695,7 +695,7 @@ def check_mongo_init() -> bool:
 
 def check_vault_init() -> bool : 
     global vault_client
-    vault_client = vaultClient.Client(vault['host'], vault['port'], vault['token']) 
+    vault_client = VaultClient(vault['host'], vault['port'], vault['token']) 
     return vault_client.connect() 
 
     
