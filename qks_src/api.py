@@ -8,6 +8,8 @@ from uuid import uuid4
 
 config_file = open("qks_src/config.yaml", 'r')
 prefs = yaml.safe_load(config_file)
+config_file.close()
+
 mongo_client = None # once it has been initialized all APIs use the same client
 vault_client = None 
 
