@@ -253,7 +253,8 @@ def main() :
                 raise Exception
         except Exception: 
             print("ERROR: use 'python3 appname <port>', port must be a valid port number")
-
+            return 
+            
     # check db init 
     db_init = api.check_mongo_init() 
     if db_init: 
