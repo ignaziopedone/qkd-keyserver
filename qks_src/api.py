@@ -1,5 +1,5 @@
 
-from vaultClient import Client as VaultClient
+from vaultClient import VaultClient
 from pymongo import MongoClient
 import yaml
 import requests 

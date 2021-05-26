@@ -1,6 +1,6 @@
 import hvac 
 
-class Client() : 
+class VaultClient() : 
     def __init__(self, address:str, port:int, token:str = None, tls:bool = False, keys:list = []): 
         if tls: 
             self.client = hvac.Client(url='https://'+address+":"+str(port), verify=False)
