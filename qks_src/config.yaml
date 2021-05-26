@@ -18,4 +18,5 @@ qks:
 vault: 
   host : localhost
   port : 8200
-  token : s.eDkxISgx8zE8FMLmkXJVXTiB
+  token : s.OREZppVgKgng0szwOmiqTR9Y
+  key64 : JUrRD1ml2nabyF46Ou73Wxo81XVwcg7qgg6P5u8lxu0=

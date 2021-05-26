@@ -448,18 +448,16 @@ def registerQKDM(qkdm_ID:str, protocol:str, qkdm_ip:str, qkdm_port:int, reachabl
                 "reachable_qks" : reachable_qks, 
                 "protocol" : protocol, 
                 "parameters" : {"max_key_count" : max_key_count, "standard_key_size" : key_size}}
-    res = qkdms_collection.insert_one(qkdm_data)
 
 
     res = vault_client.createUser(qkdm_ID)
     if res is None : 
         value = {'message' : "ERROR: unable to create a user for you in Vault"}
-        qkdms_collection.delete_one({"_id" : qkdm_ID})
         return (False, value)
 
     return_value = {}
     return_value['vault_data'] = {
-        'ip_address' : vault['host'], 
+        'host' : vault['host'], 
         'port' : vault['port'], 
         'secret_engine' : qkdm_ID, 
         'role_id' : res['role_id'], 
@@ -469,10 +467,16 @@ def registerQKDM(qkdm_ID:str, protocol:str, qkdm_ip:str, qkdm_port:int, reachabl
     admin_db = mongo_client['admin'] 
     password = str(uuid4()).replace("-", "")
     username = qkdm_ID
-    admin_db.command("createUser", username, pwd = password, roles =  [{ 'role': 'readWrite', 'db': qkdm_ID }] )
-
+    try: 
+        admin_db.command("createUser", username, pwd = password, roles =  [{ 'role': 'readWrite', 'db': qkdm_ID }] )
+    except Exception: 
+        value = {'message' : "ERROR: unable to create a user for you in database"}
+        vault_client.deleteUser(qkdm_ID)
+        return (False, value)
+    
+    res = qkdms_collection.insert_one(qkdm_data)
     return_value['database_data'] = {
-        'ip_address' : mongodb['host'], 
+        'host' : mongodb['host'], 
         'port' :  mongodb['port'], 
         'db_name' : qkdm_ID, 
         'username' : username, 
