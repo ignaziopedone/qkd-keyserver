@@ -36,10 +36,10 @@ def getKey(slave_SAE_ID):
         if status: 
             return value, 200
         else: 
-            return value, 400
+            return value, 503
     else:
         value = {'message' : "bad request: request does not contains a valid json object"}
-        return value, 500 
+        return value, 400 
 
 @app.route(prefix+"/keys/<master_SAE_ID>/dec_keys", methods=['POST'])
 def getKeyWithKeyIDs(master_SAE_ID):
@@ -53,10 +53,10 @@ def getKeyWithKeyIDs(master_SAE_ID):
             if status: 
                 return value, 200
             else: 
-                return value, 400
+                return value, 503
 
     value = {'message' : "bad request: request does not contains a valid json object"}
-    return value, 500 
+    return value, 400 
 
 @app.route(prefix+"/qkdms", methods=['GET'])
 def getQKDMs(): 
@@ -65,7 +65,7 @@ def getQKDMs():
         return value, 200
     else:
         value = {'message' : "internal error"}
-        return value, 500
+        return value, 503
 
 @app.route(prefix+"/saes", methods=['POST'])
 def registerSAE(): 
@@ -76,10 +76,10 @@ def registerSAE():
         if status:
             return value, 200
         else:
-            return value, 400
+            return value, 503
     else: 
         value = {'message' : "error: invalid content"}
-        return value, 500
+        return value, 400
 
 @app.route(prefix+"/saes/<SAE_ID>", methods=['DELETE'])
 def unregisterSAE(SAE_ID): 
@@ -88,16 +88,19 @@ def unregisterSAE(SAE_ID):
     if status: 
         return value, 200
     else: 
-        return value, 400
+        return value, 503
 
 # TODO
 @app.route(prefix+"/preferences", methods=['GET'])
 def getPreferences() : 
     # TODO: api function
     # PREFERENCES SAVED IN REDIS DUE TO CONSISTENCY
-    status = 200
-    preferences = {'preferences': [{'preference1' : 'val1'}]}
-    return preferences, status
+    status = True
+    value = {'preferences': [{'preference1' : 'val1'}]}
+    if status: 
+        return value, 200
+    else: 
+        return value, 503
 
 # TODO
 @app.route(prefix+"/preferences/<preference>", methods=['PUT'])
@@ -107,11 +110,13 @@ def setPreference(preference) :
     content = request.get_json()
     if (type(content) is dict) and ('preference' in content) and ('value' in content):
         if preference == content['preference']: 
-            status = 200
-            value = f"preference {preference} updated"
-            return preference, status
+            status, value = (True, {'message': f"preference {preference} updated"})
+            if status: 
+                return value, 200
+            else: 
+                return value, 503
     value = {'message' : "bad request: request does not contains a valid json object"}
-    return value, 500 
+    return value, 400 
 
 @app.route(prefix+"/qkdms/<qkdm_ID>/streams", methods=['POST'])
 def startQKDMStream(qkdm_ID) : 
@@ -120,7 +125,7 @@ def startQKDMStream(qkdm_ID) :
     if status: 
         return value, 200
     else: 
-        return value, 400
+        return value, 503
 
 @app.route(prefix+"/qkdms/<qkdm_ID>/streams", methods=['DELETE'])
 def deleteQKDMStreams(qkdm_ID) : 
@@ -129,7 +134,7 @@ def deleteQKDMStreams(qkdm_ID) :
     if status: 
         return value, 200
     else: 
-        return value, 400
+        return value, 503
 
 # SOUTHBOUND INTERFACE 
 # TODO
@@ -151,10 +156,10 @@ def registerQKDM():
             if status: 
                 return value, 200
             else: 
-                return value, 400
+                return value, 503
 
     value = {'message' : "error: invalid content"}
-    return value, 500
+    return value, 400
 
 @app.route(prefix+"/qkdms/<qkdm_ID>", methods=['DELETE'])
 def unregisterQKDM(qkdm_ID): 
@@ -163,7 +168,7 @@ def unregisterQKDM(qkdm_ID):
     if status: 
         return value, 200
     else: 
-        return value, 400 
+        return value, 503 
 
 
 # EXTERNAL INTERFACE 
@@ -182,10 +187,10 @@ def reserveKeys(master_SAE_ID):
             if status: 
                 return value, 200
             else: 
-                return value, 400
+                return value, 503
 
     value = {'message' : "error: invalid content"}
-    return value, 500
+    return value, 400
 
 # TODO
 @app.route(prefix+"/forward", methods=['POST'])   
@@ -201,7 +206,7 @@ def forwardData():
         return "ok", 200 
     else: 
         value = {'message' : "error: invalid content"}
-        return value, 500
+        return value, 400
 
 @app.route(prefix+"/streams", methods=['POST'])
 def createStream(): 
@@ -217,10 +222,10 @@ def createStream():
             if status: 
                 return value, 200
             else: 
-                return value, 400
+                return value, 503
 
     value = {'message' : "error: invalid content"}
-    return value, 500
+    return value, 400
         
 @app.route(prefix+"/streams/<key_stream_ID>", methods=['DELETE'])
 def closeStream(key_stream_ID): 
@@ -232,11 +237,11 @@ def closeStream(key_stream_ID):
         if status: 
             return value, 200
         else: 
-            return value, 400
+            return value, 503
 
     else: 
         value = {'message' : "error: invalid content"}
-        return value, 500
+        return value, 400
 
 def main() : 
     global app, serverPort
@@ -248,7 +253,8 @@ def main() :
                 raise Exception
         except Exception: 
             print("ERROR: use 'python3 appname <port>', port must be a valid port number")
-
+            return 
+            
     # check db init 
     db_init = api.check_mongo_init() 
     if db_init: 
