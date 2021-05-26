@@ -30,6 +30,8 @@ vault = {
 
 qks = {
     'id' : prefs['qks']['KME_ID'],
+    'ip' : prefs['qks']['KME_IP'],
+    'ip' : prefs['qks']['KME_port'],
     'max_key_per_request' : prefs['qks']['MAX_KEY_PER_REQUEST'],
     'max_key_size' : prefs['qks']['MAX_KEY_SIZE'],
     'min_key_size' : prefs['qks']['MIN_KEY_SIZE'],
