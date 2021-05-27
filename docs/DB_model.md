@@ -93,6 +93,8 @@
 "<color:green>**key_streams**" : "", 
   	"_id": "String (uuid4) ", 
 	"available_keys" : ["String", "..."], 
+	"source_id" : "String", 
+	"dest_id" : "String", 
 	"qos" : {
 		"key_lenght" : "integer",
 		"timeout" : "integer",

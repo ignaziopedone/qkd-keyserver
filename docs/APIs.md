@@ -344,7 +344,9 @@
 @startjson
 {
     "**open_stream request**":"",
-    "key_stream_ID" : "String"
+    "key_stream_ID" : "String", 
+    "source" : "String", 
+    "destination" : "String"
 }
 @endjson
 
