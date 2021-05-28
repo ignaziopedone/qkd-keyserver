@@ -14,7 +14,7 @@ prefix = "/api/v1"
 @app.route(prefix+"/keys/<slave_SAE_ID>/status", methods=['GET'])
 def getStatus(slave_SAE_ID):
     slave_SAE_ID = str(slave_SAE_ID)
-    master_SAE_ID = None # get it from authentication! 
+    master_SAE_ID = None # TODO: get it from authentication! 
     status, value = api.getStatus(slave_SAE_ID, master_SAE_ID)
     if status: 
         return value, 200
@@ -25,38 +25,37 @@ def getStatus(slave_SAE_ID):
 @app.route(prefix+"/keys/<slave_SAE_ID>/enc_keys", methods=['POST'])
 def getKey(slave_SAE_ID):
     slave_SAE_ID = str(slave_SAE_ID)
-    master_SAE_ID = None # get it from authentication! 
+    master_SAE_ID = None # TODO: get it from authentication! 
     content = request.get_json()
-    if (type(content) is dict) and 'master_SAE_ID' in content and type(content['master_SAE_ID']) is str: 
+    try: 
         master_SAE_ID = content['master_SAE_ID'] # TO BE REMOVED
-        number =content['number'] if 'number' in content and type(content['number']) is int else 1
-        key_size = content['size'] if 'size' in content and type(content['size']) is int else None
+        number = int(content['number']) if 'number' in content else 1
+        key_size = int(content['size']) if 'size' in content else None
         extension_mandatory = content['extension_mandatory'] if 'extension_mandatory' in content else None
         status, value = api.getKey(slave_SAE_ID, master_SAE_ID, number, key_size, extension_mandatory)
         if status: 
             return value, 200
         else: 
             return value, 503
-    else:
+    except Exception:
         value = {'message' : "bad request: request does not contains a valid json object"}
         return value, 400 
 
 @app.route(prefix+"/keys/<master_SAE_ID>/dec_keys", methods=['POST'])
 def getKeyWithKeyIDs(master_SAE_ID):
-    slave_SAE_ID = None # get it from authentication! 
+    slave_SAE_ID = None # TODO: get it from authentication! 
     master_SAE_ID = str(master_SAE_ID)
     content = request.get_json() 
-    if (type(content) is dict) : 
-        if 'key_IDs' in content and type(content['key_IDs']) is list:         
-            key_IDs = content['key_IDs']
-            status, value = api.getKeyWithKeyIDs(master_SAE_ID, key_IDs, slave_SAE_ID)
-            if status: 
-                return value, 200
-            else: 
-                return value, 503
-
-    value = {'message' : "bad request: request does not contains a valid json object"}
-    return value, 400 
+    try:      
+        key_IDs = list(content['key_IDs'])
+        status, value = api.getKeyWithKeyIDs(master_SAE_ID, key_IDs, slave_SAE_ID)
+        if status: 
+            return value, 200
+        else: 
+            return value, 503
+    except Exception:
+        value = {'message' : "bad request: request does not contains a valid json object"}
+        return value, 400 
 
 @app.route(prefix+"/qkdms", methods=['GET'])
 def getQKDMs(): 
@@ -70,14 +69,14 @@ def getQKDMs():
 @app.route(prefix+"/saes", methods=['POST'])
 def registerSAE(): 
     content = request.get_json()
-    if (type(content) is dict) and ('id' in content) and type(content['id']) is str:
-        sae_ID = content['id']
+    try:
+        sae_ID = str(content['id'])
         status, value = api.registerSAE(sae_ID) 
         if status:
             return value, 200
         else:
             return value, 503
-    else: 
+    except Exception: 
         value = {'message' : "error: invalid content"}
         return value, 400
 
@@ -90,7 +89,6 @@ def unregisterSAE(SAE_ID):
     else: 
         return value, 503
 
-# TODO
 @app.route(prefix+"/preferences", methods=['GET'])
 def getPreferences() : 
     # TODO: api function
@@ -102,21 +100,22 @@ def getPreferences() :
     else: 
         return value, 503
 
-# TODO
 @app.route(prefix+"/preferences/<preference>", methods=['PUT'])
 def setPreference(preference) : 
     # TODO: api function
     # PREFERENCES SAVED IN REDIS DUE TO CONSISTENCY
     content = request.get_json()
-    if (type(content) is dict) and ('preference' in content) and ('value' in content):
-        if preference == content['preference']: 
+    try:
+        if preference == str(content['preference']):
+            new_value = content['value']
             status, value = (True, {'message': f"preference {preference} updated"})
             if status: 
                 return value, 200
             else: 
                 return value, 503
-    value = {'message' : "bad request: request does not contains a valid json object"}
-    return value, 400 
+    except Exception:
+        value = {'message' : "bad request: request does not contains a valid json object"}
+        return value, 400 
 
 @app.route(prefix+"/qkdms/<qkdm_ID>/streams", methods=['POST'])
 def startQKDMStream(qkdm_ID) : 
@@ -137,29 +136,27 @@ def deleteQKDMStreams(qkdm_ID) :
         return value, 503
 
 # SOUTHBOUND INTERFACE 
-# TODO
 @app.route(prefix+"/qkdms", methods=['POST'])
 def registerQKDM(): 
     content = request.get_json()
-    if (type(content) is dict) and all (k in content for k in ('QKDM_ID', 'protocol', 'QKDM_IP', 'QKDM_port', 'reachable_QKS', 'reachable_QKDM','max_key_count', 'key_size')):
-        QKDM_ID = content['QKDM_ID'] if type(content['QKDM_ID']) is str else None
-        protocol = content['protocol'] if type(content['protocol']) is str else None
-        QKDM_IP = content['QKDM_IP'] if type(content['QKDM_IP']) is str else None
-        QKDM_port = content['QKDM_port'] if type(content['QKDM_port']) is int else None
-        reachable_qks = content['reachable_QKS'] if type(content['reachable_QKS']) is str else None
-        reachable_qkdm = content['reachable_QKDM'] if type(content['reachable_QKDM']) is str else None
-        max_key_count = content['max_key_count'] if type(content['max_key_count']) is int else None
-        key_size = content['key_size'] if type(content['key_size']) is int else None
+    try:
+        QKDM_ID = str(content['QKDM_ID'])
+        protocol = str(content['protocol']) 
+        QKDM_IP = str(content['QKDM_IP']) 
+        QKDM_port = int(content['QKDM_port']) 
+        reachable_qks = str(content['reachable_QKS'])
+        reachable_qkdm = str(content['reachable_QKDM']) 
+        max_key_count = int(content['max_key_count']) 
+        key_size = int(content['key_size']) 
         
-        if all (el is not None for el in [QKDM_ID, protocol, QKDM_IP, QKDM_port, reachable_qks, reachable_qkdm, max_key_count, key_size]): 
-            status, value = api.registerQKDM(QKDM_ID, protocol, QKDM_IP, QKDM_port, reachable_qkdm, reachable_qks, max_key_count, key_size)
-            if status: 
-                return value, 200
-            else: 
-                return value, 503
-
-    value = {'message' : "error: invalid content"}
-    return value, 400
+        status, value = api.registerQKDM(QKDM_ID, protocol, QKDM_IP, QKDM_port, reachable_qkdm, reachable_qks, max_key_count, key_size)
+        if status: 
+            return value, 200
+        else: 
+            return value, 503
+    except Exception:
+        value = {'message' : "error: invalid content"}
+        return value, 400
 
 @app.route(prefix+"/qkdms/<qkdm_ID>", methods=['DELETE'])
 def unregisterQKDM(qkdm_ID): 
@@ -176,70 +173,68 @@ def unregisterQKDM(qkdm_ID):
 def reserveKeys(master_SAE_ID):  
     master_SAE_ID = str(master_SAE_ID)
     content = request.get_json()
-    if (type(content) is dict) and all (k in content for k in ('key_stream_ID', 'slave_SAE_ID', 'key_length', 'key_ID_list')):
-        if (type( content['key_ID_list']) is list): 
-            key_stream_ID = content['key_stream_ID']
-            slave_SAE_ID = content['slave_SAE_ID']
-            key_length = int(content['key_length'])
-            key_ID_list = content['key_ID_list']
+    try:
+        key_stream_ID = str(content['key_stream_ID'])
+        slave_SAE_ID = str(content['slave_SAE_ID'])
+        key_length = int(content['key_length'])
+        key_ID_list = list(content['key_ID_list'])
 
-            status, value = api.reserveKeys(master_SAE_ID, slave_SAE_ID, key_stream_ID, key_length, key_ID_list)
-            if status: 
-                return value, 200
-            else: 
-                return value, 503
-
-    value = {'message' : "error: invalid content"}
-    return value, 400
+        status, value = api.reserveKeys(master_SAE_ID, slave_SAE_ID, key_stream_ID, key_length, key_ID_list)
+        if status: 
+            return value, 200
+        else: 
+            return value, 503
+    except Exception: 
+        value = {'message' : "error: invalid content"}
+        return value, 400
 
 # TODO
 @app.route(prefix+"/forward", methods=['POST'])   
 def forwardData(): 
     # TODO: api function
     content = request.get_json()
-    if (type(content) is dict) and all (k in content for k in ('data', 'decryption_key_ID', 'decryption_key_stream')):
+    try:
         data = content['data']
-        decryption_key_ID = content['decryption_key_ID']
-        decryption_stream_ID = content['decryption_key_stream']
+        decryption_key_ID = str(content['decryption_key_ID'])
+        decryption_stream_ID = str(content['decryption_key_stream'])
         
         # call function  
         return "ok", 200 
-    else: 
+    except: 
         value = {'message' : "error: invalid content"}
         return value, 400
 
 @app.route(prefix+"/streams", methods=['POST'])
 def createStream(): 
     content = request.get_json()
-    if (type(content) is dict) and all (k in content for k in ('source_qks_ID', 'key_stream_ID', 'type')):
-        source_qks_ID = content['source_qks_ID'] 
-        key_stream_ID = content['key_stream_ID']
-        stream_type = content['type']
-        qkdm_id = content['qkdm_id'] if 'qkdm_id' in content and type(content['qkdm_id']) is str else None
+    try:
+        source_qks_ID = str(content['source_qks_ID'])
+        key_stream_ID = str(content['key_stream_ID'])
+        stream_type = str(content['type'])
+        qkdm_id = str(content['qkdm_id']) if 'qkdm_id' in content else None
 
-        if type(source_qks_ID) is str and type(key_stream_ID) is str and type(stream_type) is str:
-            status, value = api.createStream(source_qks_ID, key_stream_ID, stream_type, qkdm_id)
-            if status: 
-                return value, 200
-            else: 
-                return value, 503
-
-    value = {'message' : "error: invalid content"}
-    return value, 400
+        status, value = api.createStream(source_qks_ID, key_stream_ID, stream_type, qkdm_id)
+        if status: 
+            return value, 200
+        else: 
+            return value, 503
+    except Exception:
+        value = {'message' : "error: invalid content"}
+        return value, 400
         
 @app.route(prefix+"/streams/<key_stream_ID>", methods=['DELETE'])
 def closeStream(key_stream_ID): 
     key_stream_ID = str(key_stream_ID)
     content = request.get_json() 
-    if (type(content) is dict) and ('source_qks_ID' in content) and type(content['source_qks_ID']) is str:
-        source_qks_ID = content['source_qks_ID']
+    try:
+        source_qks_ID = str(content['source_qks_ID'])
         status, value = api.closeStream(key_stream_ID, source_qks_ID)
         if status: 
             return value, 200
         else: 
             return value, 503
 
-    else: 
+    except Exception: 
         value = {'message' : "error: invalid content"}
         return value, 400
 
