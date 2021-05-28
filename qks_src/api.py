@@ -7,36 +7,11 @@ from math import ceil
 from uuid import uuid4
 
 config_file = open("qks_src/config.yaml", 'r')
-prefs = yaml.safe_load(config_file)
+config : dict = yaml.safe_load(config_file)
 config_file.close()
 
 mongo_client : MongoClient = None # once it has been initialized all APIs use the same client
 vault_client : VaultClient = None 
-
-mongodb = {
-    'host' : prefs['mongo_db']['host'],
-    'port' : prefs['mongo_db']['port'], 
-    'user' : prefs['mongo_db']['user'],
-    'password' : prefs['mongo_db']['password'],
-    'auth_src' : prefs['mongo_db']['auth_src'],
-    'db' : prefs['mongo_db']['db_name']
-}
-
-vault = {
-    'host' : prefs['vault']['host'],
-    'port' : prefs['vault']['port'], 
-    'token' : prefs['vault']['token']
-}
-
-qks = {
-    'id' : prefs['qks']['KME_ID'],
-    'ip' : prefs['qks']['KME_IP'],
-    'port' : prefs['qks']['KME_port'],
-    'max_key_per_request' : prefs['qks']['MAX_KEY_PER_REQUEST'],
-    'max_key_size' : prefs['qks']['MAX_KEY_SIZE'],
-    'min_key_size' : prefs['qks']['MIN_KEY_SIZE'],
-    'max_sae_id_count' : prefs['qks']['MAX_SAE_ID_COUNT']
-}
 
 
 # NORTHBOUND 
@@ -44,13 +19,13 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple[bool, dic
     # TODO : request available keys to qkdms 
     # TODO: REPLACE DB LOOKUP FOR DEST_QKS WITH ROUTING TABLES  
     global mongo_client
-    qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']
-    key_stream_collection = mongo_client[mongodb['db']]['key_streams']
-    qkdm_collection = mongo_client[mongodb['db']]['qkd_modules']
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
+    key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
+    qkdm_collection = mongo_client[config['mongo_db']['db']]['qkd_modules']
 
     # check that master_SAE is registered to this qks
     if master_SAE_ID is not None:
-        me = qks_collection.find_one({"_id" : qks['id']})
+        me = qks_collection.find_one({"_id" : config['qks']['id']})
         my_saes = me['connected_sae']
         if master_SAE_ID not in my_saes: 
             status = {"message" : "master_SAE_ID not registered on this host"}
@@ -61,14 +36,13 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple[bool, dic
     # if slave_SAE is present in this qkd network
     if dest_qks is not None: 
         res = {
-            # where there are values that can be different between master and slave host choose the more conservative one
-            'source_KME_ID': qks['id'],
+            'source_KME_ID': config['qks']['id'],
             'target_KME_ID': dest_qks['_id'],
             'master_SAE_ID': master_SAE_ID,
             'slave_SAE_ID': slave_SAE_ID,
-            'max_key_per_request': int(qks['max_key_per_request']),
-            'max_key_size': int(qks['max_key_size']),
-            'min_key_size': int(qks['min_key_size']),
+            'max_key_per_request': int(config['qks']['max_key_per_request']),
+            'max_key_size': int(config['qks']['max_key_size']),
+            'min_key_size': int(config['qks']['min_key_size']),
             'max_SAE_ID_count': 0
         }
 
@@ -102,21 +76,21 @@ def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : 
     # TODO: check indexes and require keys to qkdm
     # TODO: REPLACE DB LOOKUP FOR DEST_QKS WITH ROUTING TABLES 
     global mongo_client
-    qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']
-    key_stream_collection = mongo_client[mongodb['db']]['key_streams']
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
+    key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
 
     if key_size is None: 
-        key_size = qks['def_key_size'] 
-    elif key_size > qks['max_key_size'] or key_size < qks['min_key_size'] : 
+        key_size = config['qks']['def_key_size'] 
+    elif key_size > config['qks']['max_key_size'] or key_size < config['qks']['min_key_size'] : 
         status = {"message" : "ERROR: please respect key size limits: check them with getStatus function"}
         return (False, status) 
 
-    if number > qks['max_key_per_request'] : 
+    if number > config['qks']['max_key_per_request'] : 
         status = {"message" : "ERROR: please respect max_key_per_request limit: check it with getStatus function"}
         return (False, status) 
 
 
-    me = qks_collection.find_one({"_id" : qks['id'], "connected_sae" : master_SAE_ID})
+    me = qks_collection.find_one({"_id" : config['qks']['id'], "connected_sae" : master_SAE_ID})
     if me is None: 
         status = {"message" : "ERROR: master_SAE_ID not found on this host"}
         return (False, status)  
@@ -241,21 +215,21 @@ def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : 
 def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str = None) -> tuple[bool, dict] :
     # TODO: require single keys (indexes) to qkdms
     global mongo_client
-    qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
     # check that slave_SAE is registered to this qks
     if slave_SAE_ID is not None:
-        me = qks_collection.find_one({"_id" : qks['id'], "connected_sae" : slave_SAE_ID})
+        me = qks_collection.find_one({"_id" : config['qks']['id'], "connected_sae" : slave_SAE_ID})
         if me is None: 
             status = {"message" : "ERROR: slave_SAE_ID not found on this host"}
             return (False, status)
     
-    if len(key_IDs) > qks['max_key_per_request']: 
-        status = {"message" : f"ERROR: number of key per request limited to { qks['max_key_per_request']}"}
+    if len(key_IDs) > config['qks']['max_key_per_request']: 
+        status = {"message" : f"ERROR: number of key per request limited to { config['qks']['max_key_per_request']}"}
         return (False, status)   
 
     # get all streams that have a reserved_key matching one of the requested one
-    stream_collection = mongo_client[mongodb['db']]['key_streams']
+    stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
     query = {"reserved_keys" : {"$elemMatch" : {"sae" : master_SAE_ID, "AKID" : {"$in" : key_IDs}}}}
     matching_streams = stream_collection.find(query)
 
@@ -286,7 +260,7 @@ def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str = None) 
 def getQKDMs() -> tuple[bool, dict]: 
     # return the whole qkdm collection
     global mongo_client
-    qkdms_collection = mongo_client[mongodb['db']]['qkd_modules']
+    qkdms_collection = mongo_client[config['mongo_db']['db']]['qkd_modules']
     qkdm_list = qkdms_collection.find()
     mod_list = []
     for qkdm in qkdm_list:  
@@ -297,28 +271,28 @@ def getQKDMs() -> tuple[bool, dict]:
 def registerSAE(sae_ID: str) -> tuple[bool, dict]: 
     # TODO: push to redis 
     global mongo_client
-    qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
     sae_qks = qks_collection.find_one({"connected_sae" : sae_ID})
     if sae_qks is not None: 
         value = {"message" : "ERROR: this SAE is already registered in this network"}
         return (False, value)
     else : 
-        res = qks_collection.update_one({ "_id": qks['id'] }, { "$addToSet": { "connected_sae": sae_ID  }})
+        res = qks_collection.update_one({ "_id": config['qks']['id'] }, { "$addToSet": { "connected_sae": sae_ID  }})
         value = {"message" : "SAE successfully registered to this server"}
         return (True, value)
 
 def unregisterSAE(sae_ID: str) -> tuple[bool, dict]: 
     # TODO: push to redis 
     global mongo_client
-    qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
-    sae_qks = qks_collection.find_one({"_id" : qks['id'], "connected_sae" : sae_ID})
+    sae_qks = qks_collection.find_one({"_id" : config['qks']['id'], "connected_sae" : sae_ID})
     if sae_qks is None: 
         value = {"message" : "ERROR: this SAE is NOT registered to this server"}
         return (False, value)
     else : 
-        res = qks_collection.update_one({ "_id": qks['id'] }, { "$pull": { "connected_sae": sae_ID  }})
+        res = qks_collection.update_one({ "_id": config['qks']['id'] }, { "$pull": { "connected_sae": sae_ID  }})
         value = {"message" : "SAE successfully registered to this server"}
         return (True, value) 
 
@@ -334,9 +308,9 @@ def setPreference(preference:str, value) :
 def startQKDMStream(qkdm_ID:str) -> tuple[bool, dict] : 
     # TODO: interaction with QKDM and REDIS
     global mongo_client
-    qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']  
-    qkdm_collection = mongo_client[mongodb['db']]['qkd_modules']  
-    key_stream_collection = mongo_client[mongodb['db']]['key_streams'] 
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']  
+    qkdm_collection = mongo_client[config['mongo_db']['db']]['qkd_modules']  
+    key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams'] 
     
 
     qkdm = qkdm_collection.find_one({"_id" : qkdm_ID})
@@ -359,7 +333,7 @@ def startQKDMStream(qkdm_ID:str) -> tuple[bool, dict] :
         
     post_data = {
         'qkdm_id' : qkdm['reachable_qkdm'],
-        'source_qks_ID' : qks['id'],
+        'source_qks_ID' : config['qks']['id'],
         'type' : "direct",
         'key_stream_ID' : key_stream_ID
     }
@@ -391,7 +365,7 @@ def startQKDMStream(qkdm_ID:str) -> tuple[bool, dict] :
 def deleteQKDMStreams(qkdm_ID:str) -> tuple[bool, dict] : 
     # TODO: interaction with QKDM and REDIS 
     global mongo_client
-    key_stream_collection = mongo_client[mongodb['db']]['key_streams'] 
+    key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams'] 
     
     stream = key_stream_collection.find_one({"qkdm.id" : qkdm_ID})
     if stream is None: 
@@ -401,7 +375,7 @@ def deleteQKDMStreams(qkdm_ID:str) -> tuple[bool, dict] :
     key_stream_ID_s = key_stream_ID[:-1]
         
     delete_data = {
-        'source_qks_ID' : qks['id'],
+        'source_qks_ID' : config['qks']['id'],
         'key_stream_ID' : key_stream_ID
     }
 
@@ -432,7 +406,7 @@ def deleteQKDMStreams(qkdm_ID:str) -> tuple[bool, dict] :
 # SOUTHBOUND 
 def registerQKDM(qkdm_ID:str, protocol:str, qkdm_ip:str, qkdm_port:int, reachable_qkdm: str, reachable_qks:str, max_key_count:int, key_size:int) -> tuple[bool, dict]: 
     global mongo_client, vault_client
-    qkdms_collection = mongo_client[mongodb['db']]['qkd_modules'] 
+    qkdms_collection = mongo_client[config['mongo_db']['db']]['qkd_modules'] 
 
     if qkdm_port < 0 or qkdm_port > 65535: 
         value = {'message' : "ERROR: invalid port number"}
@@ -457,8 +431,8 @@ def registerQKDM(qkdm_ID:str, protocol:str, qkdm_ip:str, qkdm_port:int, reachabl
 
     return_value = {}
     return_value['vault_data'] = {
-        'host' : vault['host'], 
-        'port' : vault['port'], 
+        'host' : config['vault']['host'], 
+        'port' : config['vault']['port'], 
         'secret_engine' : qkdm_ID, 
         'role_id' : res['role_id'], 
         'secret_id' : res['secret_id'] } 
@@ -476,19 +450,19 @@ def registerQKDM(qkdm_ID:str, protocol:str, qkdm_ip:str, qkdm_port:int, reachabl
     
     res = qkdms_collection.insert_one(qkdm_data)
     return_value['database_data'] = {
-        'host' : mongodb['host'], 
-        'port' :  mongodb['port'], 
+        'host' : config['mongo_db']['host'], 
+        'port' :  config['mongo_db']['port'], 
         'db_name' : qkdm_ID, 
         'username' : username, 
         'password' : password, 
-        'auth_src' : mongodb['auth_src']}
+        'auth_src' : config['mongo_db']['auth_src']}
 
     return (True, return_value)
 
 
 def unregisterQKDM(qkdm_ID:str) -> tuple[bool, dict]: 
     global mongo_client, vault_client
-    qkdms_collection = mongo_client[mongodb['db']]['qkd_modules'] 
+    qkdms_collection = mongo_client[config['mongo_db']['db']]['qkd_modules'] 
     
     if qkdms_collection.find_one({"_id" : qkdm_ID}) is None: 
         value = {'message' : "ERROR: QKDM not found on this host"}
@@ -513,14 +487,14 @@ def unregisterQKDM(qkdm_ID:str) -> tuple[bool, dict]:
 # EXTERNAL 
 def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_length:int, key_ID_list:list) -> tuple[bool, dict]: 
     global mongo_client
-    qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']  
-    key_stream_collection = mongo_client[mongodb['db']]['key_streams']
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']  
+    key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
 
-    if (key_length > qks['max_key_size']) or (key_length < qks['min_key_size']) : 
+    if (key_length > config['qks']['max_key_size']) or (key_length < config['qks']['min_key_size']) : 
         status = {"message" : "ERROR: requested key size doesn't match this host parameters. Use getStatus to get more information"}
         return (False, status)
 
-    me = qks_collection.find_one({"_id" : qks['id'], "connected_sae" : slave_SAE_ID})
+    me = qks_collection.find_one({"_id" : config['qks']['id'], "connected_sae" : slave_SAE_ID})
     if me is None: 
         status = {"message" : "ERROR: slave_SAE_ID not registered on this host"}
         return (False, status) 
@@ -540,7 +514,7 @@ def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_leng
         else: 
             element['sae'] = master_SAE_ID
             element['key_length'] = key_length 
-            kids_to_be_checked.update(element['kids'])
+            kids_to_be_checked.update(list(element['kids']))
             akids.add(element['AKID'])
 
     if not valid_list: 
@@ -588,16 +562,16 @@ def forwardData(data, decryption_key_id:str, decryption_key_stream:str):
 
 def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qkdm_id:str=None) -> tuple[bool, dict]:
     global mongo_client
-    qks_collection = mongo_client[mongodb['db']]['quantum_key_servers']
-    stream_collection = mongo_client[mongodb['db']]['key_streams']
-    qkdm_collection = mongo_client[mongodb['db']]['qkd_modules']
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
+    stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
+    qkdm_collection = mongo_client[config['mongo_db']['db']]['qkd_modules']
     
     
     if stream_type == "indirect":
         # open an indirect stream 
         return (False, "ERROR: Indirect stream not implemented yet")
 
-    elif stream_type == "direct" and type(qkdm_id) is str:
+    elif stream_type == "direct" and qkdm_id:
         source_qks = qks_collection.find_one({"_id" : source_qks_ID})
         if  source_qks is None or stream_collection.find_one({"_id": key_stream_ID }) is not None:
             value = {'message' : "ERROR: invalid qks_ID or stream_ID"}
@@ -624,7 +598,7 @@ def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qkdm_id:
 
 def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]:
     global mongo_client
-    stream_collection = mongo_client[mongodb['db']]['key_streams']
+    stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
     
     stream =  stream_collection.find_one({"_id" : key_stream_ID, "dest_qks.id" : source_qks_ID}) 
     if stream is None:
@@ -652,12 +626,12 @@ def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]:
 def check_mongo_init() -> bool:
     # check that the qks can access admin DB with root credentials  
     global mongo_client
-    user = mongodb['user']
-    password = mongodb['password']
-    auth_src = mongodb['auth_src']
-    host = mongodb['host']
-    port = mongodb['port']
-    db = mongodb['db']
+    user = config['mongo_db']['user']
+    password = config['mongo_db']['password']
+    auth_src = config['mongo_db']['auth_src']
+    host = config['mongo_db']['host']
+    port = config['mongo_db']['port']
+    db = config['mongo_db']['db']
     test_mongo_client = MongoClient(f"mongodb://{user}:{password}@{host}:{port}/admin?authSource={auth_src}")
 
     try: 
@@ -669,7 +643,7 @@ def check_mongo_init() -> bool:
 
 def check_vault_init() -> bool : 
     global vault_client
-    vault_client = VaultClient(vault['host'], vault['port'], vault['token']) 
+    vault_client = VaultClient(config['vault']['host'], config['vault']['port'], config['vault']['token']) 
     return vault_client.connect() 
 
     
