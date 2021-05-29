@@ -4,16 +4,16 @@ mongo_db:
   user: rootuser
   password: rootpwd
   auth_src : admin
-  db_name : qks_db
+  db : qks_db
 
 qks:
-  KME_ID: qks1
-  KME_IP: 127.0.0.1
-  KME_port: 4000
-  MAX_KEY_PER_REQUEST: 10
-  MAX_KEY_SIZE: 512
-  MIN_KEY_SIZE: 128
-  MAX_SAE_ID_COUNT: 0
+  id: qks1
+  ip: 127.0.0.1
+  port: 4000
+  max_key_per_request: 10
+  max_key_size: 512
+  min_key_size: 128
+  max_sae_id_count: 0
 
 vault: 
   host : localhost

@@ -336,8 +336,10 @@
 @startjson
 {
     "**attachToServer request**":"",
-    "qks_IP" : "String",
-    "qks_port" : "String"
+    "qks_src_IP" : "String",
+    "qks_src_port" : "Integer",
+    "qks_src_ID" : "String",
+    "qks_dest_ID" : "String"
 }
 @endjson
 
