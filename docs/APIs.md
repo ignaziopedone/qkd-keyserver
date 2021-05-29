@@ -41,7 +41,7 @@
 | **open_connect**      | /api/v1/qkdm/actions/open_connect                 | POST  |       |
 | **close**             | /api/v1/qkdm/actions/close                        | POST  |       |
 | **get_key**           | /api/v1/qkdm/actions/get_key                      | POST  |       |
-| get_key_IDs           | /api/v1/qkdm/actions/get_ID/*<key_stream_ID>*     | GET   |       |
+| get_key_IDs           | /api/v1/qkdm/actions/get_ID/*<key_stream_ID>*?count=*<count>    | GET   |       |
 | check_key_IDs         | /api/v1/qkdm/actions/check_ID                     | POST  |       |
 | attach_to_server      | /api/v1/qkdm/actions/attach                       | POST  |       |
 
@@ -293,7 +293,7 @@
 {
     "**GET_KEY request**":"",
     "key_stream_ID" : "String (uuid4)",
-    "index" : "Integer",
+    "indexes" : ["Integer", "..."] ,
     "metadata" : {}
     
 }
@@ -302,8 +302,8 @@
 @startjson
 {
     "**GET_KEY answer**":"",
-    "key" : "String",
-    "index" : "Integer",
+    "keys" : ["Integer", "..."],
+    "indexes" : ["Integer", "..."],
     "status" : "Integer",
     "metadata" : {}
     
@@ -349,13 +349,6 @@
     "key_stream_ID" : "String", 
     "source" : "String", 
     "destination" : "String"
-}
-@endjson
-
-@startjson
-{
-    "**close_stream request**":"",
-    "key_stream_ID" : "String"
 }
 @endjson
 
