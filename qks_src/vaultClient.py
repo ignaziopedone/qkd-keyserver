@@ -66,8 +66,7 @@ class VaultClient() :
             return True
         except Exception: 
             return False
-
-        
+ 
     def readAndRemove(self, mount:str, path:str, id:str=None) -> dict: 
         try: 
             data = self.client.secrets.kv.v1.read_secret(path=path, mount_point=mount)
@@ -86,6 +85,13 @@ class VaultClient() :
         except Exception: 
             return None 
     
+    def remove(self, mount:str, path:str) -> bool: 
+        try:  
+            self.client.secrets.kv.v1.delete_secret(path = path, mount_point=mount)
+            return True
+        except Exception: 
+            return False 
+
     def createUser(self, id:str) -> dict: 
         auth_methods = self.client.sys.list_auth_methods()['data'].keys()
         if 'approle/' not in auth_methods: 
