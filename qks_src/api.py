@@ -377,7 +377,7 @@ def startQKDMStream(qkdm_ID:str) -> tuple[bool, dict] :
     # everything ok: insert the stream in the db 
     in_qkdm = {"id" : qkdm['_id'], "address" : qkdm['address']}
     in_qks = {"id" :  dest_qks['_id'], "address" : dest_qks['address']}
-    stream = {"_id" : key_stream_ID+"a", 
+    stream = {"_id" : key_stream_ID, 
         "dest_qks" : in_qks, 
         "standard_key_size" : qkdm['parameters']['standard_key_size'], 
         "reserved_keys" : [], 
@@ -398,7 +398,6 @@ def deleteQKDMStreams(qkdm_ID:str) -> tuple[bool, dict] :
         status = {"message" : "There are no active stream for this QKDM on this host "}
         return (False, status)
     key_stream_ID = stream["_id"]
-    key_stream_ID_s = key_stream_ID[:-1]
         
     delete_data = {
         'source_qks_ID' : config['qks']['id'],
@@ -408,7 +407,7 @@ def deleteQKDMStreams(qkdm_ID:str) -> tuple[bool, dict] :
     # call closeStream on the peer qks 
     dest_qks_ip = stream['dest_qks']['address']['ip']
     dest_qks_port = int(stream['dest_qks']['address']['port'])
-    response = requests.delete(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/streams/{key_stream_ID_s}", json=delete_data)
+    response = requests.delete(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/streams/{key_stream_ID}", json=delete_data)
      
     if response.status_code != 200 :
         status = {"message" : "ERROR: peer QKS unable to close the stream", 
@@ -651,6 +650,9 @@ def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]:
 
 
 # MANAGEMENT FUNCTIONS
+def get_config_port() -> int : 
+    global config 
+    return config['qks']['port']
 
 def check_mongo_init() -> bool:
     # check that the qks can access admin DB with root credentials  
