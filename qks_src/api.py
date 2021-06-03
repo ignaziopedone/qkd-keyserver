@@ -6,7 +6,7 @@ import requests
 from math import ceil
 from uuid import uuid4
 
-config_file = open("qks_src/config.yaml", 'r')
+config_file = open("qks_src/config_files/config.yaml", 'r')
 config : dict = yaml.safe_load(config_file)
 config_file.close()
 

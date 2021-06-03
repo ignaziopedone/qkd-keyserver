@@ -4,8 +4,7 @@ mongo_db:
   user: rootuser
   password: rootpwd
   auth_src : admin
-  db : qks_db
-
+  db : qks1_db
 qks:
   id: qks1
   ip: 127.0.0.1
@@ -14,9 +13,8 @@ qks:
   max_key_size: 512
   min_key_size: 128
   max_sae_id_count: 0
-
 vault: 
   host : localhost
   port : 8200
-  token : s.XZQTL3oNvIe8yWUzvcwVzrkp
-  key64 : +IbOL4/+wXiGsn4nLLkCZh8AMduqxGso29caHTNQIJg=
+  token : s.9bjNBN94txdLY3txB8OLVWs6
+  key64 : yKnbw2WKemkdvrhZGkobVIS4EGXDc6t7I+rbLMaV2Ak=
