@@ -5,8 +5,9 @@ import yaml
 import requests 
 from math import ceil
 from uuid import uuid4
+from base64 import b64decode, b64encode
 
-config_file = open("qks_src/config_files/config.yaml", 'r')
+config_file = open("qks_src/config_files/config2.yaml", 'r')
 config : dict = yaml.safe_load(config_file)
 config_file.close()
 
@@ -57,12 +58,12 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple[bool, dic
                 ret_status = ret.json()['status']
                 
                 if ret.status_code == 200 and ret_status == 0: 
-                    res['stored_key_count'] = ret.json()['availabe_indexes']
+                    res['stored_key_count'] = ret.json()['available_indexes']
                 else: 
                     res['stored_key_count'] = 0
 
                 res['key_size'] = key_stream['standard_key_size']
-                qkdm = qkdm_collection.find({"_id" : key_stream['qkdm']['id']})
+                qkdm = qkdm_collection.find_one({"_id" : key_stream['qkdm']['id']})
                 res['max_key_count'] = qkdm['parameters']['max_key_count']
                 return (True, res )
             else: 
@@ -86,8 +87,8 @@ def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : 
 
     if key_size is None: 
         key_size = config['qks']['def_key_size'] 
-    elif key_size > config['qks']['max_key_size'] or key_size < config['qks']['min_key_size'] : 
-        status = {"message" : "ERROR: please respect key size limits: check them with getStatus function"}
+    elif key_size > config['qks']['max_key_size'] or key_size < config['qks']['min_key_size'] or key_size % 8 != 0: 
+        status = {"message" : "ERROR: please respect key size limits: check them with getStatus function. Size must be a multiple of 8"}
         return (False, status) 
 
     if number > config['qks']['max_key_per_request'] : 
@@ -214,14 +215,16 @@ def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : 
         else: 
             status = {"message" : "ERROR: there was a request for an indirect stream which are not supported yet"}
             return (False, status)
-        # perform request 
-        ret_status, chunks = (0, ["0d7uf5YGkQD8rNaC0TuXU01tHShzjpZkHdK6qX1hxnJ5WGi4gEw6xGGnvknKO3XfzJmk298U09uZLz6j4xv4ccxOhR6rC2KKKy4G5KGkpsCouWdPo0iTqcgXFK68o128", "0d7uf5YGkQD8rNaC0TuXU01tHShzjpZkHdK6qX1hxnJ5WGi4gEw6xGGnvknKO3XfzJmk298U09uZLz6j4xv4ccxOhR6rC2KKKy4G5KGkpsCouWdPo0iTqcgXFK68o256", "0d7uf5YGkQD8rNaC0TuXU01tHShzjpZkHdK6qX1hxnJ5WGi4gEw6xGGnvknKO3XfzJmk298U09uZLz6j4xv4ccxOhR6rC2KKKy4G5KGkpsCouWdPo0iTqcgXFK68o384", "0d7uf5YGkQD8rNaC0TuXU01tHShzjpZkHdK6qX1hxnJ5WGi4gEw6xGGnvknKO3XfzJmk298U09uZLz6j4xv4ccxOhR6rC2KKKy4G5KGkpsCouWdPo0iTqcgXFK509512"]) 
         if ret_status != 0 : 
             status = {"message" : "ABORT : THIS SHOULD NOT HAPPEN! there is someone else which is not this QKS that is using the QKDM!"}
             return (False, status)
-        chunks = ret.json()['indexes']
-        key = ''.join(chunks)[0:key_size]
-        res['keys'].append({'key_ID' : AKID, 'key' : key})
+        chunks = ret.json()['keys']
+        
+        byte_key = b''
+        for el in chunks :
+            byte_key += b64decode(el.encode()) 
+        key = b64encode(byte_key[0:(key_size//8)]).decode()
+        res['keys'].append({'key_ID' : AKID, 'key' : key}) # key joined as bytearray, return as b64 string 
         
     key_stream_collection.update_one({"_id" : key_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : {"$in" : used_AKIDs}}}})
     return (True, res)
@@ -262,19 +265,19 @@ def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str = None) 
                     post_data = {'key_stream_ID' : stream["_id"], 'indexes' : key['kids']}
                     ret = requests.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/get_key", json=post_data)
                     ret_status = ret.json()['status']
-                    returned_keys = ret.json()['indexes'] if ret_status == 0 else None 
+                    returned_keys = ret.json()['keys'] if ret_status == 0 else None 
                 
                 else: 
                     status = {"message" : "Some keys belong to an indirect stream which is not supported yet"}
                     return (False, status)
 
-                key_length = key['key_length']
                 if ret_status == 0 and ret.status_code == 200: 
                     # if a key is not available in the module it won't be returned but the other keys will be returned correctly
-                    aggregate_key = ""
-                    for val in returned_keys.values():
-                        aggregate_key += val
-                    keys_to_be_returned['keys'].append({'key_ID' : key['AKID'], 'key' : aggregate_key[0:key_length]})
+                    byte_key = b''
+                    for el in returned_keys :
+                        byte_key += b64decode(el.encode()) 
+                    aggregate_key = b64encode(byte_key[0:(key['key_length']//8)]).decode()
+                    keys_to_be_returned['keys'].append({'key_ID' : key['AKID'], 'key' : aggregate_key})
 
                     # remove akid from reserved keys
                     stream_collection.update_one({"_id" : stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : key['AKID']}}})
@@ -514,8 +517,8 @@ def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_leng
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']  
     key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
 
-    if (key_length > config['qks']['max_key_size']) or (key_length < config['qks']['min_key_size']) : 
-        status = {"message" : "ERROR: requested key size doesn't match this host parameters. Use getStatus to get more information"}
+    if (key_length > config['qks']['max_key_size']) or (key_length < config['qks']['min_key_size'] or key_length % 8 != 0) : 
+        status = {"message" : "ERROR: requested key size doesn't match this host parameters. Use getStatus to get more information. Size must be a multiple of 8"}
         return (False, status)
 
     me = qks_collection.find_one({"_id" : config['qks']['id'], "connected_sae" : slave_SAE_ID})
@@ -556,7 +559,7 @@ def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_leng
 
     
     address = key_stream['qkdm']['address']
-    post_data = {'key_stream_ID' : key_stream_ID, 'indexes' : kids_to_be_checked} 
+    post_data = {'key_stream_ID' : key_stream_ID, 'indexes' : list(kids_to_be_checked)} 
     ret = requests.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/check_id", json=post_data)
     ret_status = ret.json()['status']
     if ret.status_code!=200 or ret_status != 0:
