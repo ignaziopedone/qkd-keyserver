@@ -176,10 +176,10 @@ def reserveKeys(master_SAE_ID):
     try:
         key_stream_ID = str(content['key_stream_ID'])
         slave_SAE_ID = str(content['slave_SAE_ID'])
-        key_length = int(content['key_length'])
+        key_size = int(content['key_size'])
         key_ID_list = list(content['key_ID_list'])
 
-        status, value = api.reserveKeys(master_SAE_ID, slave_SAE_ID, key_stream_ID, key_length, key_ID_list)
+        status, value = api.reserveKeys(master_SAE_ID, slave_SAE_ID, key_stream_ID, key_size, key_ID_list)
         if status: 
             return value, 200
         else: 
@@ -241,23 +241,13 @@ def closeStream(key_stream_ID):
 def main() : 
     global app, serverPort
             
-    # check db init 
-    db_init = api.check_mongo_init() 
-    if db_init: 
-        print("DB initialized successfully")
-    else: 
-        print("ERROR: unable to access DB")
-        return 
+    # check db and vault init 
+    status, serverPort = api.init_server()
+    if not status: 
+        print("ERROR : unable to init DB or Vault ")
+        return  
 
-    # check vault init
-    vault_init = api.check_vault_init() 
-    if vault_init: 
-        print("Vault initialized successfully")
-    else: 
-        print("ERROR: unable to access vault")
-        return 
-
-    serverPort = api.get_config_port()
+    print("SUCCESSFULL INIT: server starting on port", serverPort)
     app.run(host='0.0.0.0', port=serverPort)
 
 

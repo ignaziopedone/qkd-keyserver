@@ -191,7 +191,7 @@ def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : 
     post_data = {
         "key_stream_ID" : key_stream['_id'],
         "slave_SAE_ID" : slave_SAE_ID, 
-        "key_length" : key_size,
+        "key_size" : key_size,
         "key_ID_list" : list_to_be_sent
     }
     dest_qks_ip = key_stream['dest_qks']['address']['ip']
@@ -256,13 +256,13 @@ def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str = None) 
         return (False, status)
 
     keys_to_be_returned = { 'keys' : []}
-    for stream in matching_streams:
-        for key in stream['reserved_keys']:
+    for key_stream in matching_streams:
+        for key in key_stream['reserved_keys']:
             if key['AKID'] in key_IDs and key['sae'] == master_SAE_ID:
                 # for each requested AKID require all its chunks and build the aggregate key
-                if 'qkdm' in stream: 
-                    address = stream['qkdm']['address']
-                    post_data = {'key_stream_ID' : stream["_id"], 'indexes' : key['kids']}
+                if 'qkdm' in key_stream: 
+                    address = key_stream['qkdm']['address']
+                    post_data = {'key_stream_ID' : key_stream["_id"], 'indexes' : key['kids']}
                     ret = requests.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/get_key", json=post_data)
                     ret_status = ret.json()['status']
                     returned_keys = ret.json()['keys'] if ret_status == 0 else None 
@@ -276,11 +276,11 @@ def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str = None) 
                     byte_key = b''
                     for el in returned_keys :
                         byte_key += b64decode(el.encode()) 
-                    aggregate_key = b64encode(byte_key[0:(key['key_length']//8)]).decode()
+                    aggregate_key = b64encode(byte_key[0:(key['key_size']//8)]).decode()
                     keys_to_be_returned['keys'].append({'key_ID' : key['AKID'], 'key' : aggregate_key})
 
                     # remove akid from reserved keys
-                    stream_collection.update_one({"_id" : stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : key['AKID']}}})
+                    stream_collection.update_one({"_id" : key_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : key['AKID']}}})
     return (True, keys_to_be_returned)
 
 def getQKDMs() -> tuple[bool, dict]: 
@@ -380,13 +380,13 @@ def startQKDMStream(qkdm_ID:str) -> tuple[bool, dict] :
     # everything ok: insert the stream in the db 
     in_qkdm = {"id" : qkdm['_id'], "address" : qkdm['address']}
     in_qks = {"id" :  dest_qks['_id'], "address" : dest_qks['address']}
-    stream = {"_id" : key_stream_ID, 
+    key_stream = {"_id" : key_stream_ID, 
         "dest_qks" : in_qks, 
         "standard_key_size" : qkdm['parameters']['standard_key_size'], 
         "reserved_keys" : [], 
         "qkdm" : in_qkdm
     }
-    key_stream_collection.insert_one(stream)
+    key_stream_collection.insert_one(key_stream)
     # TODO: PUSH TO REDIS 
     status = {"message" : f"OK: stream {key_stream_ID} started successfully"}
     return (True, status)
@@ -396,11 +396,11 @@ def deleteQKDMStreams(qkdm_ID:str) -> tuple[bool, dict] :
     global mongo_client, config
     key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams'] 
     
-    stream = key_stream_collection.find_one({"qkdm.id" : qkdm_ID})
-    if stream is None: 
+    key_stream = key_stream_collection.find_one({"qkdm.id" : qkdm_ID})
+    if key_stream is None: 
         status = {"message" : "There are no active stream for this QKDM on this host "}
         return (False, status)
-    key_stream_ID = stream["_id"]
+    key_stream_ID = key_stream["_id"]
         
     delete_data = {
         'source_qks_ID' : config['qks']['id'],
@@ -408,8 +408,8 @@ def deleteQKDMStreams(qkdm_ID:str) -> tuple[bool, dict] :
     }
 
     # call closeStream on the peer qks 
-    dest_qks_ip = stream['dest_qks']['address']['ip']
-    dest_qks_port = int(stream['dest_qks']['address']['port'])
+    dest_qks_ip = key_stream['dest_qks']['address']['ip']
+    dest_qks_port = int(key_stream['dest_qks']['address']['port'])
     response = requests.delete(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/streams/{key_stream_ID}", json=delete_data)
      
     if response.status_code != 200 :
@@ -417,7 +417,7 @@ def deleteQKDMStreams(qkdm_ID:str) -> tuple[bool, dict] :
         "peer_message" : response.text}
         return (False, status)
     
-    address = stream['qkdm']['address']
+    address = key_stream['qkdm']['address']
     post_data = {'key_stream_ID' : key_stream_ID} 
     ret = requests.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/close", json=post_data)
     ret_status = ret.json()['status']
@@ -512,12 +512,12 @@ def unregisterQKDM(qkdm_ID:str) -> tuple[bool, dict]:
     return (True, value) 
 
 # EXTERNAL 
-def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_length:int, key_ID_list:list) -> tuple[bool, dict]: 
+def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_size:int, key_ID_list:list) -> tuple[bool, dict]: 
     global mongo_client, config
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']  
     key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
 
-    if (key_length > config['qks']['max_key_size']) or (key_length < config['qks']['min_key_size'] or key_length % 8 != 0) : 
+    if (key_size > config['qks']['max_key_size']) or (key_size < config['qks']['min_key_size'] or key_size % 8 != 0) : 
         status = {"message" : "ERROR: requested key size doesn't match this host parameters. Use getStatus to get more information. Size must be a multiple of 8"}
         return (False, status)
 
@@ -535,12 +535,12 @@ def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_leng
     kids_to_be_checked = set()
     akids = set()
     for element in key_ID_list: 
-        if not('AKID' in element and 'kids' in element and type(element['kids']) is list) or (key_stream['standard_key_size']*len(element['kids']) < key_length): 
+        if not('AKID' in element and 'kids' in element and type(element['kids']) is list) or (key_stream['standard_key_size']*len(element['kids']) < key_size): 
             valid_list = False
             break
         else: 
             element['sae'] = master_SAE_ID
-            element['key_length'] = key_length 
+            element['key_size'] = key_size 
             kids_to_be_checked.update(list(element['kids']))
             akids.add(element['AKID'])
 
@@ -548,7 +548,7 @@ def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_leng
         status = {"message" : "ERROR: key_ID_list not properly formatted"}
         return (False, status)
     
-    kids_per_akid = int(ceil(float(key_length) / key_stream['standard_key_size'])  ) 
+    kids_per_akid = int(ceil(float(key_size) / key_stream['standard_key_size'])  ) 
     if (len(akids) != len(key_ID_list)) or len(kids_to_be_checked)!= len(akids)*kids_per_akid : 
         status = {"message" : "ERROR: there are some duplication in AKIDs or kids received"}
         return (False, status) 
@@ -630,13 +630,13 @@ def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]:
     global mongo_client, config
     stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
     
-    stream =  stream_collection.find_one({"_id" : key_stream_ID, "dest_qks.id" : source_qks_ID}) 
-    if stream is None:
+    key_stream =  stream_collection.find_one({"_id" : key_stream_ID, "dest_qks.id" : source_qks_ID}) 
+    if key_stream is None:
         value = {'message' : "ERROR: invalid qks_ID or stream_ID"}
         return (False, value)
     
-    if 'qkdm' in stream : 
-        address = stream['qkdm']['address']  
+    if 'qkdm' in key_stream : 
+        address = key_stream['qkdm']['address']  
         post_data = {'key_stream_ID' : key_stream_ID} 
         ret = requests.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/close", json=post_data)
         ret_status = ret.json()['status']
@@ -653,34 +653,24 @@ def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]:
 
 
 # MANAGEMENT FUNCTIONS
-def get_config_port() -> int : 
-    global config 
-    return config['qks']['port']
-
-def check_mongo_init() -> bool:
+def init_server() -> tuple[bool, int ] : 
     # check that the qks can access admin DB with root credentials  
-    global mongo_client, config
-    user = config['mongo_db']['user']
-    password = config['mongo_db']['password']
-    auth_src = config['mongo_db']['auth_src']
-    host = config['mongo_db']['host']
-    port = config['mongo_db']['port']
-    db = config['mongo_db']['db']
-    test_mongo_client = MongoClient(f"mongodb://{user}:{password}@{host}:{port}/admin?authSource={auth_src}")
+    global mongo_client, vault_client, config
+    test_mongo_client = MongoClient(f"mongodb://{config['mongo_db']['user']}:{config['mongo_db']['password']}@{config['mongo_db']['host']}:{config['mongo_db']['port']}/admin?authSource={config['mongo_db']['auth_src']}")
 
     try: 
         test_mongo_client.list_database_names()
-        mongo_client = MongoClient(f"mongodb://{user}:{password}@{host}:{port}/{db}?authSource={auth_src}")
-        return True
+        mongo_client = MongoClient(f"mongodb://{config['mongo_db']['user']}:{config['mongo_db']['password']}@{config['mongo_db']['host']}:{config['mongo_db']['port']}/{config['mongo_db']['db']}?authSource={config['mongo_db']['auth_src']}")
     except Exception: 
-        return False 
+        return (False, 0) 
 
-def check_vault_init() -> bool : 
-    global vault_client, config
+    # check that the qks can access vault  
     vault_client = VaultClient(config['vault']['host'], config['vault']['port'], config['vault']['token']) 
-    return vault_client.connect() 
+    if not vault_client.connect() : 
+        return (False, -1)
 
-    
+    return (True, config['qks']['port'])
+
 
 
     

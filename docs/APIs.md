@@ -190,7 +190,7 @@
     "**reserveKeys request**":"",
     "key_stream_ID" : "String",
     "slave_SAE_ID" : "String", 
-    "key_lenght" : "Integer",
+    "key_size" : "Integer",
     "key_ID_list" :     [ 
         { "AKID": "String (uuid4)",
             "kids" : ["String", "..." ]},
