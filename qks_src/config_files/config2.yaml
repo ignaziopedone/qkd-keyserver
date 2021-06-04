@@ -1,0 +1,20 @@
+mongo_db:
+  host: localhost
+  port: 27017
+  user: rootuser
+  password: rootpwd
+  auth_src : admin
+  db : qks2_db
+qks:
+  id: qks2
+  ip: 127.0.0.1
+  port: 4001
+  max_key_per_request: 10
+  max_key_size: 512
+  min_key_size: 128
+  max_sae_id_count: 0
+vault: 
+  host : localhost
+  port : 8200
+  token : s.9bjNBN94txdLY3txB8OLVWs6
+  key64 : yKnbw2WKemkdvrhZGkobVIS4EGXDc6t7I+rbLMaV2Ak=
