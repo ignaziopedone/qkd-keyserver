@@ -7,7 +7,7 @@ from math import ceil
 from uuid import uuid4
 from base64 import b64decode, b64encode
 
-config_file = open("qks_src/config_files/config2.yaml", 'r')
+config_file = open("qks_src/config_files/config.yaml", 'r')
 config : dict = yaml.safe_load(config_file)
 config_file.close()
 
@@ -230,7 +230,6 @@ def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : 
     return (True, res)
         
 def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str = None) -> tuple[bool, dict] :
-    # TODO: require single keys (indexes) to qkdms
     global mongo_client, config
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
@@ -319,7 +318,7 @@ def unregisterSAE(sae_ID: str) -> tuple[bool, dict]:
         return (False, value)
     else : 
         res = qks_collection.update_one({ "_id": config['qks']['id'] }, { "$pull": { "connected_sae": sae_ID  }})
-        value = {"message" : "SAE successfully registered to this server"}
+        value = {"message" : "SAE successfully removed from this server"}
         return (True, value) 
 
 # TODO
@@ -665,8 +664,11 @@ def init_server() -> tuple[bool, int ] :
         return (False, 0) 
 
     # check that the qks can access vault  
-    vault_client = VaultClient(config['vault']['host'], config['vault']['port'], config['vault']['token']) 
-    if not vault_client.connect() : 
+    try: 
+        vault_client = VaultClient(config['vault']['host'], config['vault']['port'], config['vault']['token']) 
+        if not vault_client.connect() : 
+            return (False, -1)
+    except Exception: 
         return (False, -1)
 
     return (True, config['qks']['port'])
