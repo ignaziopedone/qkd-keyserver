@@ -17,13 +17,13 @@ vault_client : VaultClient = None
 
 # NORTHBOUND 
 def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple[bool, dict] : 
-    # TODO: REPLACE DB LOOKUP FOR DEST_QKS WITH ROUTING TABLES  
+    # TODO: REPLACE DB LOOKUP FOR DEST_QKS WITH ROUTING TABLES  -> REDIS saves 2 over 3 db connections (+ openin stream ones)
     global mongo_client
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
     key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
     qkdm_collection = mongo_client[config['mongo_db']['db']]['qkd_modules']
 
-    # check that master_SAE is registered to this qks
+    # check that master_SAE is registered to this qks ---> REDIS: MAYBE
     if master_SAE_ID is not None:
         me = qks_collection.find_one({"_id" : config['qks']['id']})
         my_saes = me['connected_sae']
@@ -31,7 +31,7 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple[bool, dic
             status = {"message" : "master_SAE_ID not registered on this host"}
             return (False, status)
     
-    # TODO: TAKE THIS FROM REDIS 
+    # TODO: TAKE THIS FROM REDIS  ---> REDIS: OK
     dest_qks = qks_collection.find_one({ "connected_sae": slave_SAE_ID }) 
     # if slave_SAE is present in this qkd network
     if dest_qks is not None: 
@@ -64,6 +64,7 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple[bool, dic
 
                 res['key_size'] = key_stream['standard_key_size']
                 qkdm = qkdm_collection.find_one({"_id" : key_stream['qkdm']['id']})
+                # TODO: MAX KEY COUNT CAN BE EMBEDDED IN STREAM TABLE : save one DB query 
                 res['max_key_count'] = qkdm['parameters']['max_key_count']
                 return (True, res )
             else: 
@@ -80,7 +81,7 @@ def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple[bool, dic
         return (False, status)   
 
 def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : int = None, extensions = None ) -> tuple[bool, dict] :
-    # TODO: REPLACE DB LOOKUP FOR DEST_QKS WITH ROUTING TABLES 
+    # TODO: REPLACE DB LOOKUP FOR DEST_QKS WITH ROUTING TABLES -> REDIS save 2 over 6 (or more) DB query 
     global mongo_client
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
     key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
@@ -96,6 +97,7 @@ def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : 
         return (False, status) 
 
 
+    # TODO : take this from redis and save one DB query 
     me = qks_collection.find_one({"_id" : config['qks']['id'], "connected_sae" : master_SAE_ID})
     if me is None: 
         status = {"message" : "ERROR: master_SAE_ID not found on this host"}
@@ -230,6 +232,7 @@ def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : 
     return (True, res)
         
 def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str = None) -> tuple[bool, dict] :
+    # REDIS saves 1 over 3 db query  
     global mongo_client, config
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
@@ -298,6 +301,7 @@ def registerSAE(sae_ID: str) -> tuple[bool, dict]:
     global mongo_client, config
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
+    # TODO: check from redis 
     sae_qks = qks_collection.find_one({"connected_sae" : sae_ID})
     if sae_qks is not None: 
         value = {"message" : "ERROR: this SAE is already registered in this network"}
@@ -312,6 +316,7 @@ def unregisterSAE(sae_ID: str) -> tuple[bool, dict]:
     global mongo_client, config
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
+    # TODO: check from redis
     sae_qks = qks_collection.find_one({"_id" : config['qks']['id'], "connected_sae" : sae_ID})
     if sae_qks is None: 
         value = {"message" : "ERROR: this SAE is NOT registered to this server"}
