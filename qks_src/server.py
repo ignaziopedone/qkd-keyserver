@@ -1,7 +1,9 @@
 from quart import request, Quart
 import asyncio
 import api
+import nest_asyncio
 
+nest_asyncio.apply()
 app = Quart(__name__)
 serverPort = 4000
 prefix = "/api/v1"

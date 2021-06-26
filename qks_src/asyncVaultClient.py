@@ -14,7 +14,7 @@ class VaultClient() :
         if not (await self.client.is_initialized()):
             result = await self.client.initialize(shares, threshold)
             self.client.token = result['root_token']
-            self.keys = result['keys']  
+            self.keys = result['keys_base64']  
             return await self.client.is_initialized() 
         return True
 
