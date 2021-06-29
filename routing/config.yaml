@@ -12,3 +12,10 @@ qks:
 routing: 
   timer : 10
   port : 7000
+  ip: 127.0.0.1
+redis: 
+  user: root
+  password: password 
+  topic: register 
+  host: localhost 
+  port: 6379
