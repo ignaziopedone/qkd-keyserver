@@ -22,13 +22,14 @@ QKDM docs can be found in qkdm repository
 simple file with some http requests for testing purposes 
 
 # TODO 
-* [] indirect communication 
-    * [] routing process and routing algorithm 
-    * [] redis usage for routing tables and SAE info
-    * [] forwardData implementation 
-* [] reserve key relaxed version (return reserved key list even if some are not reservable, not only a bool)
-* [] support for more than one couple of qkd modules between 2 qks 
-* [] managin secrets with Dockert and not in clear in config files 
-* [] implementing loggin with support to gunicorn (for multiprocessing) 
-* [] moving to asyncio and Quart, Hypercorn and Motor (replacing Flask, Gunicorn and PyMongo) to improve performances
+* [ ] indirect communication 
+    * [x] routing process and routing algorithm 
+    * [ ] redis usage for routing tables and SAE info
+    * [ ] forwardData implementation 
+    * [ ] dinamic cost for routes -> routing talks to qkd modules
+* [ ] reserve key relaxed version (return reserved key list even if some are not reservable, not only a bool)
+* [ ] support for more than one couple of qkd modules between 2 qks 
+* [ ] managin secrets with Dockert and not in clear in config files 
+* [ ] implementing loggin with support to gunicorn (for multiprocessing) 
+* [x] moving to asyncio and Quart, Hypercorn and Motor (replacing Flask, Gunicorn and PyMongo) to improve performances
 
