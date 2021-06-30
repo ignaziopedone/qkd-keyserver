@@ -1,3 +1,4 @@
+
 import qkdGraph
 from lsaPacket import lsaPacket
 
@@ -90,20 +91,18 @@ async def forwardSocket(packet : lsaPacket, ip : str) :
 def next_power_of_2(x : int) -> int :  
     return 1 if x == 0 else 2**(x - 1).bit_length()
 
-# TODO : CHECK REDIS USAGE
-def updateRouting(mode : str = 'standard') -> bool : 
+async def updateRouting(mode : str = 'standard') -> bool : 
     removed = False 
     global redis_client
-
 
     threshold = time.time() - float(2*config['routing']['timer']) 
     removed = expire_routes(threshold)
 
     if mode == 'force' or removed : 
         rts = graph.build_routing_tables(config['qks']['id'])
-        old_rts = [x.decode() for x in redis_client.keys()] #read from redis 
+        old_rts = [x for x in (await redis_client.keys())] #read from redis 
         
-        with redis_client.pipeline() as pipe: 
+        with redis_client.pipeline(transaction=True) as pipe: 
             for rt, value in rts.items() :
                 for k, el in value.items(): 
                     pipe.hset(name=rt, key = k, value = el)
@@ -111,7 +110,8 @@ def updateRouting(mode : str = 'standard') -> bool :
             for ort in old_rts: 
                 if ort not in rts: 
                     pipe.delete(ort)
-            pipe.execute() 
+            res = await pipe.execute() 
+            print("Redis pipeline update result: ", res)
 
         return True
     return False
@@ -177,58 +177,80 @@ def updategraph(src : str, ids : list, costs : float, timestamp : float, ptype :
 
 async def lsaUpdate() : 
     print("Started task for periodic update")
-    global config 
+    global config , graph
     timer = config['routing']['timer']
     me = config['qks']['id']
     while True: 
-        asyncio.sleep(timer)
-        sendSocket(me, 'K', time.time())
-        sendSocket(me, 'S', time.time())
-        updateRouting()
+        await asyncio.sleep(timer)
+        await sendSocket(me, 'K', time.time())
+        await sendSocket(me, 'S', time.time())
+        await updateRouting()
 
-# TODO
 async def listenForChanges() : 
     print("Started task subscribed to redis topic")
     global redis_client, config
 
     pubsub : aioredis.PubSub = redis_client.pubsub()
-    await pubsub.subscribe(config['redis']['topic'])
+    await pubsub.psubscribe(f"{config['redis']['topic']}-**")
 
     while True:
         try:
             async with async_timeout.timeout(1):
                 message = await pubsub.get_message(ignore_subscribe_messages=True)
                 if message is not None:
-                    print(f"    Subscribe message received: {message['data']}")
+                    print(f"    Subscribe message received from {message['channel']} => {message['data']}")
+                    action, name = message['data'].split("-")
+                    if message['channel'] == config['redis']['topic']+"sae": 
+                        if action == "add": 
+                            graph.add_sae(name, config['qks']['id'])
+                        elif action == "remove": 
+                            graph.remove_sae(name)
+                        
+                    elif message['channel'] == config['redis']['topic']+"link":  
+                        if action == "add": 
+                            graph.add_link(name, config['qks']['id'], 1)
+                        elif action == "remove": 
+                            graph.remove_link(name, config['qks']['id'])
                 await asyncio.sleep(0.01)
         except asyncio.TimeoutError:
-            pass 
-    
+            pass     
 
-# TODO 
 async def initData() -> bool :
     # load server and SAE list from mongo and connect to redis 
-    global config, redis_client 
-    redis_client : aioredis.Redis = aioredis.from_url(f"redis://{config['redis']['host']}:{config['redis']['port']}", username=config['redis']['user'], password=config['redis']['password'], decode_responses=True)
-    res = redis_client.ping()
-    
-    if res != "PONG" : 
+    global config, redis_client , mongo_client, graph
+    redis_client = aioredis.from_url(f"redis://{config['redis']['host']}:{config['redis']['port']}/{config['redis']['db']}", username=config['redis']['user'], password=config['redis']['password'], decode_responses=True) 
+    if not (await redis_client.ping()): 
+        return False
+
+    await redis_client.flushdb(config['redis']['db'])
+
+    try: 
+        mongo_client = MongoClient(f"mongodb://{config['mongo_db']['user']}:{config['mongo_db']['password']}@{config['mongo_db']['host']}:{config['mongo_db']['port']}/{config['mongo_db']['db']}?authSource={config['mongo_db']['auth_src']}")
+        qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers'] 
+
+        qks_cursor = qks_collection.find()
+        
+        async for qks in qks_cursor:  
+            ksAddresses[qks['_id']] = qks['address']
+            ksTimestamps[qks['_id']] = { 'K' : 0.0, 'S' : 0.0}
+            graph.add_node(qks['_id'])
+            if 'connected_sae' in qks: 
+                for sae in qks['connected_sae']: 
+                    graph.add_sae(sae, qks['_id'])
+            if 'neighbor_qks' in qks: 
+                for n in qks['neighbor_qks']: 
+                    graph.add_node(n)
+                    graph.add_link(n, qks['_id'], 1)
+    except Exception as e: 
         return False 
 
-    ''' 
-    graph.add_node(config['qks']['id'])
-    for ks in ksAddresses.keys() :
-        ksTimestamps[ks] = { 'K' : 0.0, 'S' : 0.0}
-        if ks != config['qks']['id']:  
-            graph.add_node(ks)
-            graph.add_link(config['qks']['id'], ks, 1)
-    '''
+    return True 
 
 
 async def main() : 
     global config_file
 
-    config_file = open("qks_src/config_files/config.yaml", 'r')
+    config_file = open("routing/config.yaml", 'r')
     config : dict = yaml.safe_load(config_file)
     config_file.close() 
 
