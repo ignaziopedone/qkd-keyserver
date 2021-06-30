@@ -252,7 +252,8 @@ async def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str = 
     # get all streams that have a reserved_key matching one of the requested one
     stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
     query = {"reserved_keys" : {"$elemMatch" : {"sae" : master_SAE_ID, "AKID" : {"$in" : key_IDs}}}}
-    matching_streams = await stream_collection.find(query)
+    cursor = stream_collection.find(query)
+    matching_streams = await cursor.to_list()
 
     # if no key available signal it 
     if matching_streams.count() == 0:
@@ -293,9 +294,9 @@ async def getQKDMs() -> tuple[bool, dict]:
     # return the whole qkdm collection
     global mongo_client, config
     qkdms_collection = mongo_client[config['mongo_db']['db']]['qkd_modules']
-    qkdm_list = await qkdms_collection.find()
+    qkdm_list = qkdms_collection.find()
     mod_list = []
-    for qkdm in qkdm_list:  
+    async for qkdm in qkdm_list:  
         mod_list.append(qkdm)
     qkdms = {'QKDM_list' : mod_list}
     return (True, qkdms)
