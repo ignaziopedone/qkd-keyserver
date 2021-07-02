@@ -181,6 +181,7 @@ class Graph:
                     rt = Table(dest, next, len(path)-1, cost) 
                     self.routing_tables[dest] = rt
 
+
             with self.lock['sae']:
                 sae_rts = {} 
                 for sae in self.sae_dict: 
@@ -192,6 +193,14 @@ class Graph:
                             'cost' : self.routing_tables[n].cost,
                             'len'  : self.routing_tables[n].len
                         }
+                    else: 
+                        sae_rts[sae] = {
+                            'dest' : start,
+                            'next' : start,
+                            'cost' : 0,
+                            'len'  : 0
+                        }
+
 
             return sae_rts
 
