@@ -20,28 +20,26 @@ http_client : aiohttp.ClientSession = None
 
 
 # NORTHBOUND 
-async def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple[bool, dict] : 
-    # TODO: REPLACE DB LOOKUP FOR DEST_QKS WITH ROUTING TABLES  -> REDIS saves 2 over 3 db connections (+ openin stream ones)
-    global mongo_client, http_client
-    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
+async def getStatus(slave_SAE_ID : str, master_SAE_ID : str) -> tuple[bool, dict] : 
+    global mongo_client, http_client, redis_client
     key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
-    qkdm_collection = mongo_client[config['mongo_db']['db']]['qkd_modules']
 
-    # check that master_SAE is registered to this qks ---> REDIS: MAYBE
-    if master_SAE_ID is not None:
-        me = await qks_collection.find_one({"_id" : config['qks']['id']})
-        my_saes = me['connected_sae']
-        if master_SAE_ID not in my_saes: 
-            status = {"message" : "master_SAE_ID not registered on this host"}
-            return (False, status)
-    
-    # TODO: TAKE THIS FROM REDIS  ---> REDIS: OK
-    dest_qks = await qks_collection.find_one({ "connected_sae": slave_SAE_ID }) 
+    master_sae_rt = await redis_client.hgetall(master_SAE_ID) #me = await qks_collection.find_one({"_id" : config['qks']['id']})
+    if not master_sae_rt or master_sae_rt['dest'] != config['qks']['id']: 
+        status = {"message" : "master_SAE_ID not registered on this host"}
+        return (False, status)
+
+    sae_rt = await redis_client.hgetall(slave_SAE_ID) #dest_qks = await qks_collection.find_one({ "connected_sae": slave_SAE_ID }) 
     # if slave_SAE is present in this qkd network
-    if dest_qks is not None: 
+    if sae_rt : #is not None:  -> check if the returned dict is not empty 
+        if sae_rt['dest'] == config['qks']['id']: 
+            status = {"message" : f"ERROR: {slave_SAE_ID} registered on this host"}
+            return (False, status)
+        
+        
         res = {
             'source_KME_ID': config['qks']['id'],
-            'target_KME_ID': dest_qks['_id'],
+            'target_KME_ID': sae_rt['dest'], # dest_qks['_id'],
             'master_SAE_ID': master_SAE_ID,
             'slave_SAE_ID': slave_SAE_ID,
             'max_key_per_request': int(config['qks']['max_key_per_request']),
@@ -53,7 +51,7 @@ async def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple[boo
         res['connection_type'] = "direct"
 
         qkdm_exist = True if res['connection_type'] == "direct" else False 
-        key_stream = await key_stream_collection.find_one({"dest_qks.id" : dest_qks['_id'], "qkdm" : {"$exists" : qkdm_exist}})
+        key_stream = await key_stream_collection.find_one({"dest_qks.id" : sae_rt['dest'], "qkdm" : {"$exists" : qkdm_exist}})
         
         if key_stream is not None:
             if qkdm_exist: 
@@ -69,9 +67,7 @@ async def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple[boo
                         res['stored_key_count'] = 0
 
                 res['key_size'] = key_stream['standard_key_size']
-                qkdm = await qkdm_collection.find_one({"_id" : key_stream['qkdm']['id']})
-                # TODO: MAX KEY COUNT CAN BE EMBEDDED IN STREAM TABLE : save one DB query 
-                res['max_key_count'] = qkdm['parameters']['max_key_count']
+                res['max_key_count'] = key_stream['max_key_count']
                 return (True, res )
             else: 
                 #manage an indirect connection 
@@ -87,9 +83,7 @@ async def getStatus(slave_SAE_ID : str, master_SAE_ID : str = None) -> tuple[boo
         return (False, status)   
 
 async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : int = None, extensions = None ) -> tuple[bool, dict] :
-    # TODO: REPLACE DB LOOKUP FOR DEST_QKS WITH ROUTING TABLES -> REDIS save 2 over 6 (or more) DB query 
-    global mongo_client, http_client
-    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
+    global mongo_client, http_client, redis_client
     key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
 
     if key_size is None: 
@@ -103,11 +97,10 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
         return (False, status) 
 
 
-    # TODO : take this from redis and save one DB query 
-    me = await qks_collection.find_one({"_id" : config['qks']['id'], "connected_sae" : master_SAE_ID})
-    if me is None: 
-        status = {"message" : "ERROR: master_SAE_ID not found on this host"}
-        return (False, status)  
+    master_sae_rt = await redis_client.hgetall(master_SAE_ID) #me = await qks_collection.find_one({"_id" : config['qks']['id']})
+    if not master_sae_rt or master_sae_rt['dest'] != config['qks']['id']: 
+        status = {"message" : "master_SAE_ID not registered on this host"}
+        return (False, status)
 
     if extensions is not None:
         if len(extensions) == 1 and 'require_direct' in extensions and type(extensions['require_direct'] ) is bool:
@@ -117,11 +110,10 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
             return (False, status)
          
 
-    # TODO: TAKE THIS FROM REDIS! 
-    dest_qks = await qks_collection.find_one({"connected_sae" : slave_SAE_ID})
+    slave_sae_rt = await redis_client.hgetall(master_SAE_ID)
     stream_type = "direct"
 
-    if dest_qks is None : 
+    if not slave_sae_rt : 
         status = {"message" : "ERROR: slave_SAE_ID not found on this network! "}
         return (False, status) 
 
@@ -130,7 +122,7 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
         status = {"message" : "ERROR: there are no direct connection available as required"}
         return (False, status)
 
-    key_stream = await key_stream_collection.find_one({"dest_qks.id" : dest_qks['_id'], "qkdm" : {"$exists" : direct_stream}})
+    key_stream = await key_stream_collection.find_one({"dest_qks.id" : slave_sae_rt['dest'], "qkdm" : {"$exists" : direct_stream}})
 
     if key_stream is None: 
         status = {"message" : "ERROR: there are no streams to reach requeted SAE", 
@@ -235,17 +227,16 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
     await key_stream_collection.update_one({"_id" : key_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : {"$in" : used_AKIDs}}}})
     return (True, res)
         
-async def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str = None) -> tuple[bool, dict] :
+async def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str) -> tuple[bool, dict] :
     # REDIS saves 1 over 3 db query  
-    global mongo_client, config, http_client
+    global mongo_client, config, http_client, redis_client
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
     # check that slave_SAE is registered to this qks
-    if slave_SAE_ID is not None:
-        me = await qks_collection.find_one({"_id" : config['qks']['id'], "connected_sae" : slave_SAE_ID})
-        if me is None: 
-            status = {"message" : "ERROR: slave_SAE_ID not found on this host"}
-            return (False, status)
+    slave_sae_rt = await redis_client.hgetall(slave_SAE_ID) 
+    if not slave_sae_rt or slave_sae_rt['dest'] != config['qks']['id']: 
+        status = {"message" : "master_SAE_ID not registered on this host"}
+        return (False, status)
     
     if len(key_IDs) > config['qks']['max_key_per_request']: 
         status = {"message" : f"ERROR: number of key per request limited to { config['qks']['max_key_per_request']}"}
@@ -307,9 +298,8 @@ async def registerSAE(sae_ID: str) -> tuple[bool, dict]:
     global mongo_client, config, redis_client
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
-    # TODO: check from redis 
-    sae_qks = await qks_collection.find_one({"connected_sae" : sae_ID})
-    if sae_qks is not None: 
+    sae_rt = await redis_client.hgetall(sae_ID) #me = await qks_collection.find_one({"_id" : config['qks']['id']})
+    if sae_rt :
         value = {"message" : "ERROR: this SAE is already registered in this network"}
         return (False, value)
     else : 
@@ -322,9 +312,8 @@ async def unregisterSAE(sae_ID: str) -> tuple[bool, dict]:
     global mongo_client, config, redis_client
     qks_collection = await mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
-    # TODO: check from redis
-    sae_qks = await qks_collection.find_one({"_id" : config['qks']['id'], "connected_sae" : sae_ID})
-    if sae_qks is None: 
+    sae_rt = await redis_client.hgetall(sae_ID)
+    if not sae_rt or sae_rt['dest'] != config['qks']['id']: 
         value = {"message" : "ERROR: this SAE is NOT registered to this server"}
         return (False, value)
     else : 
@@ -393,6 +382,7 @@ async def startQKDMStream(qkdm_ID:str) -> tuple[bool, dict] :
     key_stream = {"_id" : key_stream_ID, 
         "dest_qks" : in_qks, 
         "standard_key_size" : qkdm['parameters']['standard_key_size'], 
+        "max_key_count" : qkdm['parameters']['max_key_count'],
         "reserved_keys" : [], 
         "qkdm" : in_qkdm
     }
@@ -624,7 +614,7 @@ async def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qk
                 if ret_status == 0 and ret.status == 200: 
                     in_qkdm = {"id" : selected_qkdm['_id'], "address" : selected_qkdm['address']}
                     dest_qks = {"id" : source_qks_ID, "address" : source_qks['address']}
-                    new_stream = {"_id" : key_stream_ID, "dest_qks" : dest_qks, "reserved_keys" : [], "qkdm" : in_qkdm, "standard_key_size" : selected_qkdm['parameters']['standard_key_size']}
+                    new_stream = {"_id" : key_stream_ID, "dest_qks" : dest_qks, "reserved_keys" : [], "qkdm" : in_qkdm, "standard_key_size" : selected_qkdm['parameters']['standard_key_size'], "max_key_count" : selected_qkdm['parameters']['max_key_count']}
                     await stream_collection.insert_one(new_stream)
                     await redis_client.publish(f"{config['redis']['topic']}-link", f"add-{source_qks_ID}")
                     value = {'message' : "stream successfully created"}
