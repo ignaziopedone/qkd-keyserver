@@ -65,6 +65,7 @@
     }
 	}, 
 	"standard_key_size" : "Integer",
+	"max_key_count" : "Integer", 
 	"reserved_keys" : 
 		[
 			{ 
