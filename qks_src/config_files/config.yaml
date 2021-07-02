@@ -16,5 +16,12 @@ qks:
 vault: 
   host : localhost
   port : 8200
-  token : s.smxNXOLalSXWBWZ0gIcQrIbg
-  key64 : gEv8R4T8wB6rZux7RgDamEcPzZDPq7ldV/8/V0PQKJU=
+  token : s.7UgHBdvjAt9F0O7dKEfKtgqs
+  key64 : nFBnlc44TUa927gU6Lvhpa4YrMOF3tBsIIszOPoZKwU=
+redis: 
+  user: root
+  password: password 
+  topic: register 
+  host: localhost 
+  port: 6379
+  db : qks1

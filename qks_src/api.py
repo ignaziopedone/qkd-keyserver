@@ -1,3 +1,4 @@
+from aioredis.client import Redis
 import yaml
 from math import ceil
 from uuid import uuid4
@@ -6,7 +7,7 @@ from base64 import b64decode, b64encode
 from asyncVaultClient import VaultClient # from VaultClient import VaultClient 
 import aiohttp #import requests
 from motor.motor_asyncio import AsyncIOMotorClient as MongoClient # from pymongo import MongoClient, ReturnDocument
-
+import aioredis
 
 config_file = open("qks_src/config_files/config.yaml", 'r')
 config : dict = yaml.safe_load(config_file)
@@ -14,6 +15,7 @@ config_file.close()
 
 mongo_client : MongoClient = None # once it has been initialized all APIs use the same client
 vault_client : VaultClient = None 
+redis_client : Redis = None
 http_client : aiohttp.ClientSession = None
 
 
@@ -302,8 +304,7 @@ async def getQKDMs() -> tuple[bool, dict]:
     return (True, qkdms)
 
 async def registerSAE(sae_ID: str) -> tuple[bool, dict]: 
-    # TODO: push to redis 
-    global mongo_client, config
+    global mongo_client, config, redis_client
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
     # TODO: check from redis 
@@ -313,12 +314,12 @@ async def registerSAE(sae_ID: str) -> tuple[bool, dict]:
         return (False, value)
     else : 
         res = await qks_collection.update_one({ "_id": config['qks']['id'] }, { "$addToSet": { "connected_sae": sae_ID  }})
-        value = {"message" : "SAE successfully registered to this server"}
+        value = {"message" : "SAE successfully registered to this server"} 
+        await redis_client.publish(f"{config['redis']['topic']}-sae", f"add-{sae_ID}")
         return (True, value)
 
 async def unregisterSAE(sae_ID: str) -> tuple[bool, dict]: 
-    # TODO: push to redis 
-    global mongo_client, config
+    global mongo_client, config, redis_client
     qks_collection = await mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
     # TODO: check from redis
@@ -328,6 +329,7 @@ async def unregisterSAE(sae_ID: str) -> tuple[bool, dict]:
         return (False, value)
     else : 
         res = await qks_collection.update_one({ "_id": config['qks']['id'] }, { "$pull": { "connected_sae": sae_ID  }})
+        await redis_client.publish(f"{config['redis']['topic']}-sae", f"remove-{sae_ID}")
         value = {"message" : "SAE successfully removed from this server"}
         return (True, value) 
 
@@ -341,7 +343,6 @@ async def setPreference(preference:str, value) :
     return 
 
 async def startQKDMStream(qkdm_ID:str) -> tuple[bool, dict] : 
-    # TODO: interaction with REDIS
     global mongo_client, config, http_client
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']  
     qkdm_collection = mongo_client[config['mongo_db']['db']]['qkd_modules']  
@@ -396,13 +397,12 @@ async def startQKDMStream(qkdm_ID:str) -> tuple[bool, dict] :
         "qkdm" : in_qkdm
     }
     await key_stream_collection.insert_one(key_stream)
-    # TODO: PUSH TO REDIS 
+    await redis_client.publish(f"{config['redis']['topic']}-link", f"add-{dest_qks['_id']}")
     status = {"message" : f"OK: stream {key_stream_ID} started successfully"}
     return (True, status)
         
 async def deleteQKDMStreams(qkdm_ID:str) -> tuple[bool, dict] : 
-    # TODO: interaction with REDIS 
-    global mongo_client, config, http_client
+    global mongo_client, config, http_client, redis_client
     key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams'] 
     
     key_stream = await key_stream_collection.find_one({"qkdm.id" : qkdm_ID})
@@ -431,11 +431,11 @@ async def deleteQKDMStreams(qkdm_ID:str) -> tuple[bool, dict] :
         ret_val = await ret.json()
         ret_status = ret_val['status']
         await key_stream_collection.delete_one({"_id" : key_stream_ID})
-        # TODO: push to REDIS 
         if ret_status == 0 and ret.status == 200:
             status = {"message" : f"OK: stream {key_stream_ID} closed successfully"}
         else: 
             status = {"message" : f"FORCED CLOSURE: stream {key_stream_ID} closed by peer, qkdm is unable to close it but this ID is not valid anymore"}
+        await redis_client.publish(f"{config['redis']['topic']}-link", f"remove-{key_stream['dest_qks']['id']}")
         return (True, status)
 
 
@@ -626,6 +626,7 @@ async def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qk
                     dest_qks = {"id" : source_qks_ID, "address" : source_qks['address']}
                     new_stream = {"_id" : key_stream_ID, "dest_qks" : dest_qks, "reserved_keys" : [], "qkdm" : in_qkdm, "standard_key_size" : selected_qkdm['parameters']['standard_key_size']}
                     await stream_collection.insert_one(new_stream)
+                    await redis_client.publish(f"{config['redis']['topic']}-link", f"add-{source_qks_ID}")
                     value = {'message' : "stream successfully created"}
                     return (True, value)
                 else: 
@@ -653,6 +654,7 @@ async def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]
             ret_status = ret_val['status']
             if ret_status == 0 and ret.status == 200: 
                 await stream_collection.delete_one({"_id" : key_stream_ID})
+                await redis_client.publish(f"{config['redis']['topic']}-link", f"remove-{source_qks_ID}")
                 value = {'message' : "stream successfully closed"}
                 return (True, value)
             else: 
@@ -666,7 +668,7 @@ async def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]
 # MANAGEMENT FUNCTIONS
 async def init_server() -> tuple[bool, int ] : 
     # check that the qks can access admin DB with root credentials  
-    global mongo_client, vault_client, config, http_client
+    global mongo_client, vault_client, config, http_client, redis_client
     test_mongo_client = MongoClient(f"mongodb://{config['mongo_db']['user']}:{config['mongo_db']['password']}@{config['mongo_db']['host']}:{config['mongo_db']['port']}/admin?authSource={config['mongo_db']['auth_src']}")
 
     try: 
@@ -679,6 +681,13 @@ async def init_server() -> tuple[bool, int ] :
     try: 
         vault_client = VaultClient(config['vault']['host'], config['vault']['port'], config['vault']['token']) 
         if not (await vault_client.connect()) : 
+            return (False, -1)
+    except Exception: 
+        return (False, -1)
+
+    try:  
+        redis_client = aioredis.from_url(f"redis://{config['redis']['host']}:{config['redis']['port']}/{config['redis']['db']}", username=config['redis']['user'], password=config['redis']['password'], decode_responses=True)
+        if not (await redis_client.ping()) : 
             return (False, -1)
     except Exception: 
         return (False, -1)
