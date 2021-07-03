@@ -31,12 +31,14 @@ dims = {
 
 
 class lsaPacket() :
-    def __init__(self, version, nAdj, ptype = None, srcID = None, srcIP = None, srcPort = None, ids = None, costs = None, time = 0.0, options = None, auth = None): 
+    def __init__(self, version, nAdj, ptype = None, srcID = None, routingPort = None, routingIP = None, srcIP = None, srcPort = None, ids = None, costs = None, time = 0.0, options = None, auth = None): 
         self.version : int = version 
         self.type : str = ptype  
         self.srcID : str = srcID 
         self.srcIP : str= srcIP 
         self.srcPort : int = srcPort 
+        self.routingIP : str= routingIP
+        self.routingPort : int = routingPort 
         self.nAdj : int = nAdj 
         self.ids : list = ids 
         self.costs : list = costs
@@ -57,6 +59,8 @@ class lsaPacket() :
         for key, val in dims[version].items() : 
             if key == 'id_list' or key == 'cost_list' : 
                 pdim += self.nAdj * val
+            elif key == "IP" or key == "port": 
+                pdim += 2*val # qks and routing ip/port
             else : 
                 pdim += val
         return pdim 
@@ -75,6 +79,11 @@ class lsaPacket() :
         self.srcIP = str(ipaddress.ip_address(int.from_bytes(rawbytes[start:start+dims[version]['IP']], 'big')))
         start += dims[version]['IP']
         self.srcPort = int.from_bytes(rawbytes[start:start+dims[version]['port']], 'big')
+        start += dims[version]['port']
+
+        self.routingIP = str(ipaddress.ip_address(int.from_bytes(rawbytes[start:start+dims[version]['IP']], 'big')))
+        start += dims[version]['IP']
+        self.routingPort = int.from_bytes(rawbytes[start:start+dims[version]['port']], 'big')
         start += dims[version]['port']
 
         self.ids = []
@@ -132,6 +141,12 @@ class lsaPacket() :
         if self.srcIP is not None and self.srcPort is not None: 
             b += int(ipaddress.ip_address(self.srcIP)).to_bytes(dims[version]['IP'], 'big')
             b += int(self.srcPort).to_bytes(dims[version]['port'], 'big')
+        else: 
+            return None
+
+        if self.routingIP is not None and self.routingPort is not None: 
+            b += int(ipaddress.ip_address(self.routingIP)).to_bytes(dims[version]['IP'], 'big')
+            b += int(self.routingPort).to_bytes(dims[version]['port'], 'big')
         else: 
             return None
         
