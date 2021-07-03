@@ -10,13 +10,13 @@ qks:
   ip: 127.0.0.1
   port: 4000
 routing: 
-  timer : 10
+  timer : 20
   port : 7000
   ip: 127.0.0.1
 redis: 
   user: root
   password: password 
-  topic: register 
+  topic: register1 
   host: localhost 
   port: 6379
-  db : qks
+  db : qks1
