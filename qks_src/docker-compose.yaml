@@ -15,12 +15,22 @@ services:
         image: vault
         container_name: vault_notls
         ports:
-            - "8200:8200"
+            - 8200:8200
         volumes:
-            - ./vault_config.json:/vault/config/vault_config.json
+            - ./config_files/vault_config.json:/vault/config/vault_config.json
         cap_add:
             - IPC_LOCK
         entrypoint: vault server -config=/vault/config/vault_config.json
+
+    redis: 
+        image: redis 
+        container_name: redis_auth
+        ports:
+            - 6379:6379
+        volumes: 
+            - ./config_files/redis.conf:/usr/local/etc/redis/redis.conf
+        command: redis-server /usr/local/etc/redis/redis.conf
+
 
     
     

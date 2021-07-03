@@ -24,7 +24,7 @@ simple file with some http requests for testing purposes
 # TODO 
 * [ ] indirect communication 
     * [x] routing process and routing algorithm 
-    * [ ] redis usage for routing tables and SAE info
+    * [x] redis usage for routing tables and SAE info
     * [ ] forwardData implementation 
     * [ ] dinamic cost for routes -> routing talks to qkd modules
 * [ ] reserve key relaxed version (return reserved key list even if some are not reservable, not only a bool)
