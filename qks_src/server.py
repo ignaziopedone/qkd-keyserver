@@ -167,6 +167,26 @@ async def unregisterQKDM(qkdm_ID):
     else: 
         return value, 503 
 
+@app.route(prefix+"/qks", methods=['POST'])
+async def registerQKS(): 
+    content = await request.get_json()
+    try:
+        QKS_ID = str(content['QKS_ID'])
+        QKS_IP = str(content['QKS_IP']) 
+        QKS_port = int(content['QKS_port']) 
+        routing_IP = str(content['routing_IP']) 
+        routing_port = int(content['routing_port']) 
+
+        
+        status, value = await api.registerQKS(QKS_ID, QKS_IP, QKS_port, routing_IP, routing_port)
+        if status: 
+            return value, 200
+        else: 
+            return value, 503
+    except Exception:
+        value = {'message' : "error: invalid content"}
+        return value, 400
+
 
 # EXTERNAL INTERFACE 
 @app.route(prefix+"/keys/<master_SAE_ID>/reserve", methods=['POST'])
@@ -237,6 +257,10 @@ async def closeStream(key_stream_ID):
     except Exception: 
         value = {'message' : "error: invalid content"}
         return value, 400
+
+
+
+
 
 async def main() : 
     global app, serverPort

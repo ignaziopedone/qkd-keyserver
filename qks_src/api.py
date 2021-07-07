@@ -428,19 +428,46 @@ async def deleteQKDMStreams(qkdm_ID:str) -> tuple[bool, dict] :
         await redis_client.publish(f"{config['redis']['topic']}-link", f"remove-{key_stream['dest_qks']['id']}")
         return (True, status)
 
+async def registerQKS(qks_id:str, qks_ip:str, qks_port:int, routing_ip:str, routing_port:int): 
+    global mongo_client, config
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
+
+    data = {
+        "_id" : qks_id, 
+        "connected_sae" : [], 
+        "neighbor_qks" : [], 
+        "address" : {"ip" : qks_ip, "port" : qks_port}, 
+        "routing_address" : {"ip" : routing_ip, "port" : routing_port}
+    } 
+
+    res  = await qks_collection.update_one({"_id" : qks_id}, {"$setOnInsert" : data}, upsert=True)
+    if res.matched_count == 1 :
+        value = {"message" : "ERROR: this QKS is already registered in this network"}
+        return (False, value)
+    else : 
+        value = {"message" : "QKS successfully registered on this network. Its information will be progragated after a qkdm link is established"} 
+        await redis_client.publish(f"{config['redis']['topic']}-qks", f"add-{qks_id}_{routing_ip}_{routing_port}")
+        return (True, value)
+
 
 # SOUTHBOUND 
 async def registerQKDM(qkdm_ID:str, protocol:str, qkdm_ip:str, qkdm_port:int, reachable_qkdm: str, reachable_qks:str, max_key_count:int, key_size:int) -> tuple[bool, dict]: 
     global mongo_client, vault_client, config
     qkdms_collection = mongo_client[config['mongo_db']['db']]['qkd_modules'] 
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
     if qkdm_port < 0 or qkdm_port > 65535: 
         value = {'message' : "ERROR: invalid port number"}
         return (False, value)
 
     if (await qkdms_collection.find_one({"_id" : qkdm_ID})) is not None: 
-        value = {'message' : "ERROR: retrieving known qkdm data not supported yet"}
+        value = {'message' : "ERROR: this qkdm is already registered but retrieving known qkdm data is not supported yet"}
         return (False, value)
+
+    if (await qks_collection.find_one({"_id" : reachable_qks})) is None: 
+        value = {'message' : "ERROR: reachable qks is unknows, please register it on this network"}
+        return (False, value)
+    
 
     qkdm_data = {"_id" : qkdm_ID, 
                 "address" : {"ip" : qkdm_ip, "port" : qkdm_port}, 

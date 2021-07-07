@@ -11,8 +11,9 @@
 | getQKDMs              | /api/v1/qkdms                             | GET    | admin only |
 | registerSAE           | /api/v1/saes                              | POST   |            |
 | unregisterSAE         | /api/v1/saes/*<SAE_ID>*                   | DELETE |            |
-| startQKDMStream       | /api/v1/qkdms/*<qkdm_ID>*/streams          | POST   | admin only |
-| deleteQKDMStreams     | /api/v1/qkdms/*<qkdm_ID>*/streams          | DELETE | admin only |
+| startQKDMStream       | /api/v1/qkdms/*<qkdm_ID>*/streams         | POST   | admin only |
+| deleteQKDMStreams     | /api/v1/qkdms/*<qkdm_ID>*/streams         | DELETE | admin only |
+| registerQKS           | /api/v1/qks                               | POST   | admin only | 
 
 ## External (QKS to QKS) interface 
 
@@ -222,5 +223,16 @@
     "data" : "byte_array",
     "decryption_key_ID" : "String",
     "decryption_key_stream" : "String"
+}
+@endjson
+
+@startjson 
+{
+    "**registerQKS request**": "", 
+    "QKS_ID":"String",
+    "QKS_IP" : "String",
+    "QKS_port" : "Integer", 
+    "routing_IP" : "String",
+    "routing_port" : "Integer"
 }
 @endjson
