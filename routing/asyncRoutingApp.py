@@ -1,5 +1,3 @@
-
-from os import fwalk
 import qkdGraph
 from lsaPacket import lsaPacket
 
@@ -206,7 +204,7 @@ async def lsaUpdate() :
 
 async def listenForChanges() : 
     print("Started task subscribed to redis topic")
-    global redis_client, config
+    global redis_client, config, graph
     res = None 
     pubsub : aioredis.PubSub = redis_client.pubsub()
     await pubsub.psubscribe(f"{config['redis']['topic']}-**")
@@ -236,11 +234,15 @@ async def listenForChanges() :
                 if res: 
                     await updateRouting('force')
                     await sendSocket(config['qks']['id'], 'S', time.time())
-            
 
-
-        
-
+            elif message['channel'] == config['redis']['topic']+"-qks": # new qks data received as id_routingIP_routingPort  
+                if action == "add":
+                    id, ip, port = name.split("_")
+                    ksAddresses[id] = {'ip' : ip, 'port' : port}
+                    ksTimestamps[id] = { 'K' : 0.0, 'S' : 0.0}
+                    graph.add_node(id)
+                    print("new qks node added", graph.get_node(id))
+                    
 
 async def initData() -> bool :
     # load server and SAE list from mongo and connect to redis 
