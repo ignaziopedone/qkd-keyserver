@@ -4,10 +4,10 @@ from lsaPacket import lsaPacket
 from motor.motor_asyncio import AsyncIOMotorClient as MongoClient
 from pymongo import UpdateOne
 import asyncio
+import aiohttp
 import time 
 import yaml 
 import aioredis
-import async_timeout
 import sys 
 
 
@@ -16,8 +16,43 @@ ksAddresses = {}
 graph = qkdGraph.Graph([])
 redis_client : aioredis.Redis = None 
 mongo_client : MongoClient = None 
+http_client : aiohttp.ClientSession = None
 config : dict = {}
+cost_param = {'c0' : 20, 'c1' : -10, 'c2' : -5}
+qkdm_availability = {}
 
+def nextPowerOf2(x : int) -> int :  
+    return 1 if x == 0 else 2**(x - 1).bit_length()
+
+def routeCost(old: int, new: int, tot : int) -> float  : 
+    global cost_param
+    delta : int = ( new - old ) 
+    cost : float = cost_param['c0'] + cost_param['c1'] * ( new / tot ) + cost_param['c2'] * ( delta / tot ) 
+    return cost 
+
+async def updateLinkCosts(): 
+    global mongo_client, http_client , config, qkdm_availability, graph
+
+    streams_collection = mongo_client[config['mongo_db']['db']]['key_streams']
+
+
+    async for stream in (streams_collection.find({"qkdm" : {"$exists" : True}})) : 
+        address = stream['qkdm']['address']
+        async with http_client.get(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/get_id/{stream['_id']}") as ret: 
+            ret_val = await ret.json()
+            if ret_val['status'] == 0 and ret.status_code == 200: 
+                new_av = ret_val['available_indexes']
+            else: 
+                new_av = 0    
+            qkdm_id = stream['qkdm']['id']
+            
+            old_av = qkdm_availability[qkdm_id] if qkdm_id in qkdm_availability else new_av    
+            qkdm_availability[qkdm_id] = new_av 
+            cost = routeCost(old_av, new_av, stream['max_key_count'])
+
+            graph.update_link(config['qks']['id'], stream['qks_dest']['id'], cost)
+
+    return
 
 async def receiveSocket(reader : asyncio.StreamReader, writer : asyncio.StreamWriter): 
     global mongo_client, config
@@ -89,8 +124,6 @@ async def forwardSocket(packet : lsaPacket, ip : str) :
                 writer.close()
                 await writer.wait_closed() 
 
-def nextPowerOf2(x : int) -> int :  
-    return 1 if x == 0 else 2**(x - 1).bit_length()
 
 async def updateRouting(mode : str = 'standard') -> bool : 
     removed = False 
@@ -99,6 +132,8 @@ async def updateRouting(mode : str = 'standard') -> bool :
     threshold = time.time() - float(2*config['routing']['timer']) 
     removed = expireRoutes(threshold)
     
+    await updateLinkCosts()
+
     if mode == 'force' or removed : 
         rts = graph.build_routing_tables(config['qks']['id'])
         old_rts = [x for x in (await redis_client.keys())] #read from redis 
@@ -204,7 +239,7 @@ async def lsaUpdate() :
 
 async def listenForChanges() : 
     print("Started task subscribed to redis topic")
-    global redis_client, config, graph
+    global redis_client, config, graph, cost_param
     res = None 
     pubsub : aioredis.PubSub = redis_client.pubsub()
     await pubsub.psubscribe(f"{config['redis']['topic']}-**")
@@ -227,7 +262,7 @@ async def listenForChanges() :
 
             elif message['channel'] == config['redis']['topic']+"-link":  
                 if action == "add": 
-                    res = graph.add_link(name, config['qks']['id'], 1)
+                    res = graph.add_link(name, config['qks']['id'], cost_param['c0'])
                 elif action == "remove": 
                     res = graph.remove_link(name, config['qks']['id']) 
                 print(f" CHANGES : link {res}")
@@ -246,7 +281,7 @@ async def listenForChanges() :
 
 async def initData() -> bool :
     # load server and SAE list from mongo and connect to redis 
-    global config, redis_client , mongo_client, graph
+    global config, redis_client , mongo_client, graph, cost_param, http_client
     redis_client = aioredis.from_url(f"redis://{config['redis']['host']}:{config['redis']['port']}/{config['redis']['db']}", username=config['redis']['user'], password=config['redis']['password'], decode_responses=True) 
     if not (await redis_client.ping()): 
         return False
@@ -270,10 +305,12 @@ async def initData() -> bool :
             if 'neighbor_qks' in qks: 
                 for n in qks['neighbor_qks']: 
                     graph.add_node(n)
-                    graph.add_link(n, qks['_id'], 1)
+                    graph.add_link(n, qks['_id'], cost_param['c0'])
 
     except Exception: 
         return False 
+
+    http_client = aiohttp.ClientSession()
 
     print(f"INIT GRAPH: {graph}")
     graph.print_nodes()

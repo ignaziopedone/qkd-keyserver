@@ -19,7 +19,7 @@ class Node() :
         self.saes : list = []
 
 
-    def add_neighbor(self, neighbor , cost : float) -> bool:
+    def add_neighbor(self, neighbor : 'Node' , cost : float) -> bool:
         if neighbor not in self.adjacent and neighbor.id != self.id : 
             self.adjacent[neighbor] = cost 
             return True
