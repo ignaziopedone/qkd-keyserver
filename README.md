@@ -25,10 +25,11 @@ simple file with some http requests for testing purposes
 * [ ] indirect communication 
     * [x] routing process and routing algorithm 
     * [x] redis usage for routing tables and SAE info
-    * [ ] forwardData implementation 
-    * [ ] dinamic cost for routes -> routing talks to qkd modules
+    * [x] forwardData implementation 
+    * [x] dinamic cost for routes -> routing talks to qkd modules
+    * [ ] indirect stream support 
 * [ ] reserve key relaxed version (return reserved key list even if some are not reservable, not only a bool)
-* [ ] support for more than one couple of qkd modules between 2 qks 
+* [ ] support for more than one couple of qkd modules between 2 qks (??) 
 * [ ] managin secrets with Dockert and not in clear in config files 
 * [ ] implementing loggin with support to gunicorn (for multiprocessing) 
 * [x] moving to asyncio and Quart, Hypercorn and Motor (replacing Flask, Gunicorn and PyMongo) to improve performances

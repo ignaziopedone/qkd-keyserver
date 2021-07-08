@@ -40,7 +40,7 @@ async def updateLinkCosts():
         address = stream['qkdm']['address']
         async with http_client.get(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/get_id/{stream['_id']}") as ret: 
             ret_val = await ret.json()
-            if ret_val['status'] == 0 and ret.status_code == 200: 
+            if ret_val['status'] == 0 and ret.status == 200: 
                 new_av = ret_val['available_indexes']
             else: 
                 new_av = 0    

@@ -208,18 +208,22 @@ async def reserveKeys(master_SAE_ID):
         value = {'message' : "error: invalid content"}
         return value, 400
 
-# TODO
 @app.route(prefix+"/forward", methods=['POST'])   
 async def forwardData(): 
-    # TODO: api function
     content = await request.get_json()
     try:
-        data = content['data']
-        decryption_key_ID = str(content['decryption_key_ID'])
+        data = str(content['data'])
+        decryption_key_ID = content['decryption_key_ID']
         decryption_stream_ID = str(content['decryption_key_stream'])
+        iv = str(content['iv'])
+        destination_sae = str(content['destination_sae']) 
         
         # call function  
-        return "ok", 200 
+        status, value = await api.forwardData(data, decryption_key_ID, decryption_stream_ID, iv, destination_sae) 
+        if status: 
+            return value, 200 
+        else: 
+            return value, 503 
     except: 
         value = {'message' : "error: invalid content"}
         return value, 400

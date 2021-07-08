@@ -220,9 +220,11 @@
 @startjson
 {
     "**forwardData request**":"",
-    "data" : "byte_array",
+    "data" : "String",
     "decryption_key_ID" : "String",
-    "decryption_key_stream" : "String"
+    "decryption_key_stream" : "String",
+    "iv" : "String", 
+    "destination_sae" : "String"  
 }
 @endjson
 

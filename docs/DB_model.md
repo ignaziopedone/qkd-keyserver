@@ -81,7 +81,8 @@
 		"address" : {
       "ip" : "String", 
       "port" : "Integer"
-    }
+    },
+	"master_key_id" : "String"
 	}
 }
 @endjson
