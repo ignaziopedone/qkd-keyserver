@@ -105,6 +105,7 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
         status = {"message" : "master_SAE_ID not registered on this host"}
         return (False, status)
 
+    required_direct = False 
     if extensions is not None:
         if len(extensions) == 1 and 'require_direct' in extensions and type(extensions['require_direct'] ) is bool:
             required_direct = extensions['require_direct'] 
@@ -114,23 +115,27 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
          
 
     slave_sae_rt = await redis_client.hgetall(master_SAE_ID)
-    stream_type = "direct"
 
     if not slave_sae_rt : 
         status = {"message" : "ERROR: slave_SAE_ID not found on this network! "}
         return (False, status) 
 
-    direct_stream = True if stream_type == "direct" else False 
-    if direct_stream is False and required_direct is True: 
-        status = {"message" : "ERROR: there are no direct connection available as required"}
-        return (False, status)
+   
+    key_stream_cursor = key_stream_collection.find({"dest_qks.id" : slave_sae_rt['dest']}).sort({"qkdm" : -1}) # ordering: at top streams with a qkdm, at bottom indirect stream (with qkdm field as null)
+    key_streams = await key_stream_cursor.to_list(length=1) #take only first result 
+    key_stream = key_streams[0] if len(key_streams) > 0 else None
 
-    key_stream = await key_stream_collection.find_one({"dest_qks.id" : slave_sae_rt['dest'], "qkdm" : {"$exists" : direct_stream}})
-
-    if key_stream is None: 
+    if key_stream is None:
         status = {"message" : "ERROR: there are no streams to reach requeted SAE", 
                     "details" : "indirect connection not implemented yet. Call getStatus before getKey to avoid this error"}
         return (False, status)
+    
+    if "qkdm" not in key_stream and required_direct: 
+        status = {"message" : "ERROR: there are no direct streams to reach requeted SAE", 
+                    "details" : "If you want to open an indirect stream please call getStatus "}
+        return (False, status) 
+            
+        
 
     # check available keys and save their ids inside stream.reserved_keys collection 
     needed_keys = number
@@ -139,6 +144,7 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
 
     chunks_for_each_key = int(ceil(float(key_size) / key_stream['standard_key_size'])  ) 
     if 'qkdm' in key_stream:  
+        direct_communication = True 
         address = key_stream['qkdm']['address']
         
         async with http_client.get(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/get_id/{key_stream['_id']}?count=-1") as ret: 
@@ -178,6 +184,7 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
                 break 
     else: 
         # indirect stream not implemented yet
+        direct_communication = False 
         status =  {"message" : "ERROR: indirect stream not implemented yet"} 
         return (False, status )
 
@@ -202,7 +209,7 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
             await key_stream_collection.update_one({"_id" : key_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : {"$in" : used_AKIDs}}}})
             return (False, status)
 
-    res = {'keys' : [], 'key_container_extension' : {'direct_communication' : direct_stream, 'returned_keys' : len(list_to_be_sent)}}
+    res = {'keys' : [], 'key_container_extension' : {'direct_communication' : direct_communications, 'returned_keys' : len(list_to_be_sent)}}
     for element in list_to_be_sent: 
         AKID = element['AKID']
         kids = element['kids']
@@ -249,10 +256,10 @@ async def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str) -
     stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
     query = {"reserved_keys" : {"$elemMatch" : {"sae" : master_SAE_ID, "AKID" : {"$in" : key_IDs}}}}
     cursor = stream_collection.find(query)
-    matching_streams = await cursor.to_list()
+    matching_streams = await cursor.to_list(length=len(key_IDs)) #mactching streams can't be more than requested keys 
 
     # if no key available signal it 
-    if matching_streams.count() == 0:
+    if len(matching_streams) == 0:
         status = {"message" : "none of your requester keys are available!"}
         return (False, status)
 
@@ -436,7 +443,7 @@ async def deleteQKDMStreams(qkdm_ID:str) -> tuple[bool, dict] :
         await redis_client.publish(f"{config['redis']['topic']}-link", f"remove-{key_stream['dest_qks']['id']}")
         return (True, status)
 
-async def registerQKS(qks_id:str, qks_ip:str, qks_port:int, routing_ip:str, routing_port:int): 
+async def registerQKS(qks_id:str, qks_ip:str, qks_port:int, routing_ip:str, routing_port:int) -> tuple[bool, dict]: 
     global mongo_client, config
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
@@ -457,6 +464,39 @@ async def registerQKS(qks_id:str, qks_ip:str, qks_port:int, routing_ip:str, rout
         await redis_client.publish(f"{config['redis']['topic']}-qks", f"add-{qks_id}_{routing_ip}_{routing_port}")
         return (True, value)
 
+async def deleteIndirectStream(destination_qks_id: str, force_mode:bool = False ) -> tuple[bool, dict] : 
+    global mongo_client, config, http_client, redis_client
+    key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams'] 
+    
+    key_stream = await key_stream_collection.find_one({"dest_qks.id" : destination_qks_id, "indirect_data" : {"$exists" : True}})
+    if key_stream is None: 
+        status = {"message" : "There are no active indirect stream to this qks"}
+        return (False, status)
+
+    if not force_mode: 
+        direct_key_stream = await key_stream_collection.find_one({"dest_qks.id" : destination_qks_id, "qkdm" : {"$exists" : True}})
+        if direct_key_stream is not None: 
+            status = {"message" : "There isn't a direct stream to this destination: closing this stream can cause errors!", 
+                    "details" : "call this API in force mode if you really want to delete this stream"}
+            return (False, status)
+    
+    key_stream_ID = key_stream["_id"]    
+    delete_data = {
+        'source_qks_ID' : config['qks']['id'],
+        'key_stream_ID' : key_stream_ID
+    }
+
+    # call closeStream on the peer qks 
+    dest_qks_ip = key_stream['dest_qks']['address']['ip']
+    dest_qks_port = int(key_stream['dest_qks']['address']['port'])
+    async with http_client.delete(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/streams/{key_stream_ID}", json=delete_data) as response:
+        if response.status != 200 :
+            status = {"message" : "ERROR: peer QKS unable to close the stream", 
+            "peer_message" : (await response.text)}
+            return (False, status)
+        else: 
+            status = {"message" : f"OK: indirect stream {key_stream_ID} closed successfully"}
+            return (True, status)
 
 # SOUTHBOUND 
 async def registerQKDM(qkdm_ID:str, protocol:str, qkdm_ip:str, qkdm_port:int, reachable_qkdm: str, reachable_qks:str, max_key_count:int, key_size:int) -> tuple[bool, dict]: 
@@ -665,7 +705,7 @@ async def forwardData(data:str, decryption_key_id:str, decryption_key_stream:str
         await vault_client.writeOrUpdate(config['qks']['id'], str(key_id), {str(key_id) : b64encode(key).decode()}) #this key will be used to decrypt the master key when opening an indirect stream 
         return True, {'message' : 'key saved successfully'}
     
-    else : # NOT DONE YET -> forward to next hop  
+    else : # -> forward to next hop  
         forward_stream = await key_stream_collection.find_one({"dest_qks.id" : next_hop, "qkdm" : {"$exists" : True}}) 
         if forward_stream is None: 
             status = {'message' : "ERROR: unable to forward, there isn't an available stream to the next hop! "}
@@ -806,7 +846,7 @@ async def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qk
         return (False, value)
 
 async def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]:
-    global mongo_client, config, http_client
+    global mongo_client, config, http_client, vault_client
     stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
     
     key_stream =  await stream_collection.find_one({"_id" : key_stream_ID, "dest_qks.id" : source_qks_ID}) 
@@ -823,14 +863,18 @@ async def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]
             if ret_status == 0 and ret.status == 200: 
                 await stream_collection.delete_one({"_id" : key_stream_ID})
                 await redis_client.publish(f"{config['redis']['topic']}-link", f"remove-{source_qks_ID}")
-                value = {'message' : "stream successfully closed"}
+                value = {'message' : "direct stream successfully closed"}
                 return (True, value)
             else: 
                 value = {'message' : "ERROR in stream closure"}
                 return (False, value)
     else: 
-        # close indirect stream
-        return (False, "not implemented yet") 
+        master_key_id = key_stream['indirect_data']['master_key_id']
+        await vault_client.remove(config['qks']['id'], master_key_id)
+        await stream_collection.delete_one({"_id" : key_stream_ID})
+
+        
+        return (True, "direct stream successfully closed") 
 
 
 # MANAGEMENT FUNCTIONS

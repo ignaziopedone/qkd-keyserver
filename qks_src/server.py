@@ -134,6 +134,45 @@ async def deleteQKDMStreams(qkdm_ID) :
         return value, 200
     else: 
         return value, 503
+    
+
+
+@app.route(prefix+"/qks", methods=['POST'])
+async def registerQKS(): 
+    content = await request.get_json()
+    try:
+        QKS_ID = str(content['QKS_ID'])
+        QKS_IP = str(content['QKS_IP']) 
+        QKS_port = int(content['QKS_port']) 
+        routing_IP = str(content['routing_IP']) 
+        routing_port = int(content['routing_port']) 
+
+        
+        status, value = await api.registerQKS(QKS_ID, QKS_IP, QKS_port, routing_IP, routing_port)
+        if status: 
+            return value, 200
+        else: 
+            return value, 503
+    except Exception:
+        value = {'message' : "error: invalid content"}
+        return value, 400
+
+
+@app.route(prefix+"/qks/<qks_ID>/streams", methods=['DELETE'])
+async def deleteIndirectStream(qks_ID) : 
+    try: 
+        qks_ID = str(qks_ID)
+        param = int(request.args.get('force'))
+        force_mode = True if param == 1 else False 
+        status, value = await api.deleteIndirectStream(qks_ID, force_mode)
+        if status: 
+            return value, 200
+        else: 
+            return value, 503
+    except Exception:
+        value = {'message' : "error: invalid content"}
+        return value, 400
+
 
 # SOUTHBOUND INTERFACE 
 @app.route(prefix+"/qkdms", methods=['POST'])
@@ -166,26 +205,6 @@ async def unregisterQKDM(qkdm_ID):
         return value, 200
     else: 
         return value, 503 
-
-@app.route(prefix+"/qks", methods=['POST'])
-async def registerQKS(): 
-    content = await request.get_json()
-    try:
-        QKS_ID = str(content['QKS_ID'])
-        QKS_IP = str(content['QKS_IP']) 
-        QKS_port = int(content['QKS_port']) 
-        routing_IP = str(content['routing_IP']) 
-        routing_port = int(content['routing_port']) 
-
-        
-        status, value = await api.registerQKS(QKS_ID, QKS_IP, QKS_port, routing_IP, routing_port)
-        if status: 
-            return value, 200
-        else: 
-            return value, 503
-    except Exception:
-        value = {'message' : "error: invalid content"}
-        return value, 400
 
 
 # EXTERNAL INTERFACE 
@@ -261,8 +280,6 @@ async def closeStream(key_stream_ID):
     except Exception: 
         value = {'message' : "error: invalid content"}
         return value, 400
-
-
 
 
 

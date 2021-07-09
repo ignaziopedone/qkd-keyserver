@@ -79,11 +79,15 @@
 	"qkdm" : {
 		"id": "String (uuid4)", 
 		"address" : {
-      "ip" : "String", 
-      "port" : "Integer"
-    },
-	"master_key_id" : "String"
+      		"ip" : "String", 
+      		"port" : "Integer"
+    	}
+	},
+	"indirect_data" : {
+		"master_key_id" : "String",
+		"available_keys" : "Integer"
 	}
+	
 }
 @endjson
 
@@ -94,8 +98,8 @@
 "<color:red>**Routing Table **" : "", 
   	"SAE ID" : "String", 
 	"type " : "[static/dinamic]",
-	"next hop id" : "String", 
-	"next hop address" : {"ip" :"String", "port" : "Integer"},
+	"next hop" : "String", 
+	"dest" : "String", 
 	"cost" : "Integer" ,
 	"length" : "Integer" 
 }
