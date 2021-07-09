@@ -49,21 +49,24 @@ class VaultClient() :
         except Exception as e: 
             return False
 
-    async def createEngine(self, path:str) -> bool: 
+    async def createEngine(self, mount:str) -> bool: 
+        # path = qkdm_id
         try:
-            await self.client.enable_secret_backend(backend_type='kv', mount_point=path, options={'version':1})
+            await self.client.enable_secret_backend(backend_type='kv', mount_point=mount, options={'version':1})
             return True
         except Exception: 
             return False 
 
-    async def disableEngine(self, path:str) -> bool  : 
+    async def disableEngine(self, mount:str) -> bool  :
+        # path = qkdm_id 
         try:
-            response = await self.client.disable_secret_backend(mount_point=path)
+            response = await self.client.disable_secret_backend(mount_point=mount)
             return True
         except Exception: 
             return False 
 
     async def writeOrUpdate(self, mount:str, path:str, data:dict) -> bool: 
+        # mount = qkdm_id + key_stream_ID   # path = key_id
         try: 
             answer = await self.client.write(mount + "/" + path, **data)
             return True
@@ -72,6 +75,7 @@ class VaultClient() :
 
         
     async def readAndRemove(self, mount:str, path:str) -> dict: 
+        # mount = qkdm_id + key_stream_ID   # path = key_id
         try: 
             data = await self.client.read(path=mount + "/" + path)
             ret = data['data']
@@ -83,6 +87,7 @@ class VaultClient() :
             return None 
 
     async def remove(self, mount:str, path:str) -> bool: 
+        # mount = qkdm_id + key_stream_ID   # path = key_id
         try:  
             await self.client.delete(path = mount + "/" + path)
             return True
@@ -90,6 +95,7 @@ class VaultClient() :
             return False 
 
     async def read(self, mount:str, path:str) -> dict: 
+        # mount = qkdm_id + key_stream_ID   # path = key_id
         try: 
             data = await self.client.read(path=mount + "/" + path)
             ret = data['data']
@@ -98,8 +104,27 @@ class VaultClient() :
         except Exception: 
             return None 
 
+    async def check(self, mount:str, paths:list) -> bool:
+        # mount = qkdm_id + key_stream_ID   # paths = key_ids list
+        try: 
+            data = await self.client.list(path = mount )
+            for path in paths: 
+                if path not in data['data']['keys']: 
+                    return False 
+            return False 
+
+        except Exception: 
+            return False 
     
-    
+    async def list(self, mount:str) -> list: 
+        # mount = qkdm_id + key_stream_ID
+        try: 
+            data = await self.client.list(path = mount)
+            return data['data']['keys']
+
+        except Exception: 
+            return False 
+
     async def createUser(self, id:str) -> dict: 
         res = await self.client.list_auth_backends()
         auth_methods = res['data'].keys()
