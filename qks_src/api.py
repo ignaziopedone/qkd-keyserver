@@ -209,7 +209,7 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
             await key_stream_collection.update_one({"_id" : key_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : {"$in" : used_AKIDs}}}})
             return (False, status)
 
-    res = {'keys' : [], 'key_container_extension' : {'direct_communication' : direct_communications, 'returned_keys' : len(list_to_be_sent)}}
+    res = {'keys' : [], 'key_container_extension' : {'direct_communication' : direct_communication, 'returned_keys' : len(list_to_be_sent)}}
     for element in list_to_be_sent: 
         AKID = element['AKID']
         kids = element['kids']
