@@ -34,56 +34,58 @@ async def getStatus(slave_SAE_ID : str, master_SAE_ID : str) -> tuple[bool, dict
 
     sae_rt = await redis_client.hgetall(slave_SAE_ID) #dest_qks = await qks_collection.find_one({ "connected_sae": slave_SAE_ID }) 
     # if slave_SAE is present in this qkd network
-    if sae_rt : #is not None:  -> check if the returned dict is not empty 
-        if sae_rt['dest'] == config['qks']['id']: 
-            status = {"message" : f"ERROR: {slave_SAE_ID} registered on this host"}
-            return (False, status)
-        
-        
-        res = {
-            'source_KME_ID': config['qks']['id'],
-            'target_KME_ID': sae_rt['dest'], # dest_qks['_id'],
-            'master_SAE_ID': master_SAE_ID,
-            'slave_SAE_ID': slave_SAE_ID,
-            'max_key_per_request': int(config['qks']['max_key_per_request']),
-            'max_key_size': int(config['qks']['max_key_size']),
-            'min_key_size': int(config['qks']['min_key_size']),
-            'max_SAE_ID_count': 0
-        }
-
-        res['connection_type'] = "direct"
-
-        qkdm_exist = True if res['connection_type'] == "direct" else False 
-        key_stream = await key_stream_collection.find_one({"dest_qks.id" : sae_rt['dest'], "qkdm" : {"$exists" : qkdm_exist}})
-        
-        if key_stream is not None:
-            if qkdm_exist: 
-                address = key_stream['qkdm']['address']
-                
-                
-                async with http_client.get(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/get_id/{key_stream['_id']}") as ret: 
-                    ret_val = await ret.json()
-                    ret_status = ret_val['status']
-                    if ret.status == 200 and ret_status == 0: 
-                        res['stored_key_count'] = ret_val['available_indexes']
-                    else: 
-                        res['stored_key_count'] = 0
-
-                res['key_size'] = key_stream['standard_key_size']
-                res['max_key_count'] = key_stream['max_key_count']
-                return (True, res )
-            else: 
-                #manage an indirect connection 
-                status = {"message" : "ERROR: There should be an indirect stream but they are not yet implemented"}
-                return (False, status)
-        else: 
-            # no stream available. Try to open an indirect connection
-            status = {"message" : "ERROR: This sae is connected but is unreachable: no direct connections are available"}
-            return (False, status)
- 
-    else : 
+    if not sae_rt : #is not None:  -> check if the returned dict is not empty 
         status = {"message" : "slave_SAE_ID not found in this qkd network"}
         return (False, status)   
+
+    if sae_rt['dest'] == config['qks']['id']: 
+        status = {"message" : f"ERROR: {slave_SAE_ID} registered on this host"}
+        return (False, status)
+    
+    
+    res = {
+        'source_KME_ID': config['qks']['id'],
+        'target_KME_ID': sae_rt['dest'], # dest_qks['_id'],
+        'master_SAE_ID': master_SAE_ID,
+        'slave_SAE_ID': slave_SAE_ID,
+        'max_key_per_request': int(config['qks']['max_key_per_request']),
+        'max_key_size': int(config['qks']['max_key_size']),
+        'min_key_size': int(config['qks']['min_key_size']),
+        'max_SAE_ID_count': 0
+    }
+
+    if sae_rt['dest'] == sae_rt['next'] :
+        res['connection_type'] = "direct"
+    else: 
+        res['connection_type'] = "indirect"
+
+    qkdm_exist = True if res['connection_type'] == "direct" else False 
+    key_stream = await key_stream_collection.find_one({"dest_qks.id" : sae_rt['dest'], "qkdm" : {"$exists" : qkdm_exist}})
+    
+    if key_stream is not None:
+        res['key_size'] = key_stream['standard_key_size']
+        res['max_key_count'] = key_stream['max_key_count']
+        if qkdm_exist: 
+            address = key_stream['qkdm']['address']
+            
+            async with http_client.get(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/get_id/{key_stream['_id']}") as ret: 
+                ret_val = await ret.json()
+                ret_status = ret_val['status']
+                if ret.status == 200 and ret_status == 0: 
+                    res['stored_key_count'] = ret_val['available_indexes']
+                else: 
+                    res['stored_key_count'] = 0
+            
+        else: 
+            res['stored_key_count'] = key_stream['indirect_data']['available_keys']
+
+        return (True, res )
+    else: 
+        # no stream available. Try to open an indirect connection
+        status = {"message" : "ERROR: This sae is connected but is unreachable: no direct connections are available"}
+        return (False, status)
+ 
+
 
 async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : int = None, extensions = None ) -> tuple[bool, dict] :
     global mongo_client, http_client, redis_client
@@ -105,6 +107,7 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
         status = {"message" : "master_SAE_ID not registered on this host"}
         return (False, status)
 
+
     required_direct = False 
     if extensions is not None:
         if len(extensions) == 1 and 'require_direct' in extensions and type(extensions['require_direct'] ) is bool:
@@ -114,28 +117,27 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
             return (False, status)
          
 
-    slave_sae_rt = await redis_client.hgetall(master_SAE_ID)
+    slave_sae_rt = await redis_client.hgetall(slave_SAE_ID)
 
     if not slave_sae_rt : 
         status = {"message" : "ERROR: slave_SAE_ID not found on this network! "}
         return (False, status) 
 
+    qkdm_exists = False 
+    if slave_sae_rt['next'] == slave_sae_rt['dest'] : 
+        qkdm_exists = True 
+        
+    if not qkdm_exists and required_direct: # requested only direct, but only indirect are possible 
+        status = {"message" : "ERROR: there are not direct connection to this SAE. Try asking for an indirect one ! "}
+        return (False, status) 
    
-    key_stream_cursor = key_stream_collection.find({"dest_qks.id" : slave_sae_rt['dest']}).sort({"qkdm" : -1}) # ordering: at top streams with a qkdm, at bottom indirect stream (with qkdm field as null)
-    key_streams = await key_stream_cursor.to_list(length=1) #take only first result 
-    key_stream = key_streams[0] if len(key_streams) > 0 else None
+    key_stream = key_stream_collection.find_one({"dest_qks.id" : slave_sae_rt['dest'], "qkdm" : {"$exists" : qkdm_exists}}) 
 
     if key_stream is None:
         status = {"message" : "ERROR: there are no streams to reach requeted SAE", 
                     "details" : "indirect connection not implemented yet. Call getStatus before getKey to avoid this error"}
         return (False, status)
-    
-    if "qkdm" not in key_stream and required_direct: 
-        status = {"message" : "ERROR: there are no direct streams to reach requeted SAE", 
-                    "details" : "If you want to open an indirect stream please call getStatus "}
-        return (False, status) 
             
-        
 
     # check available keys and save their ids inside stream.reserved_keys collection 
     needed_keys = number
@@ -239,8 +241,8 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
         
 async def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str) -> tuple[bool, dict] :
     # REDIS saves 1 over 3 db query  
-    global mongo_client, config, http_client, redis_client
-    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
+    global mongo_client, config, http_client, redis_client, vault_client
+    stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
 
     # check that slave_SAE is registered to this qks
     slave_sae_rt = await redis_client.hgetall(slave_SAE_ID) 
@@ -253,7 +255,7 @@ async def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str) -
         return (False, status)   
 
     # get all streams that have a reserved_key matching one of the requested one
-    stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
+    
     query = {"reserved_keys" : {"$elemMatch" : {"sae" : master_SAE_ID, "AKID" : {"$in" : key_IDs}}}}
     cursor = stream_collection.find(query)
     matching_streams = await cursor.to_list(length=len(key_IDs)) #mactching streams can't be more than requested keys 
@@ -278,11 +280,14 @@ async def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str) -
                         ret_status_code = ret.status
                 
                 else: 
-                    status = {"message" : "Some keys belong to an indirect stream which is not supported yet"}
-                    return (False, status)
+                    key = await vault_client.readAndRemove(f"{config['qks']['id']}/{key_stream['_id']}", key['AKID'])
+                    if key is not None: 
+                        ret_status, ret_status_code = 0, 200
+                    else:  
+                        ret_status = 0
 
                 if ret_status == 0 and ret_status_code == 200: 
-                    # if a key is not available in the module it won't be returned but the other keys will be returned correctly
+                    # if a key is not available in the module or in vault it won't be returned but the other keys will be returned correctly
                     byte_key = b''
                     for el in returned_keys :
                         byte_key += b64decode(el.encode()) 
@@ -586,8 +591,7 @@ async def unregisterQKDM(qkdm_ID:str) -> tuple[bool, dict]:
 
 # EXTERNAL 
 async def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, key_size:int, key_ID_list:list) -> tuple[bool, dict]: 
-    global mongo_client, config, http_client, redis_client
-    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']  
+    global mongo_client, config, http_client, redis_client, vault_client
     key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
 
     if (key_size > config['qks']['max_key_size']) or (key_size < config['qks']['min_key_size'] or key_size % 8 != 0) : 
@@ -626,19 +630,21 @@ async def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, ke
         status = {"message" : "ERROR: there are some duplication in AKIDs or kids received"}
         return (False, status) 
 
-    if 'qkdm' not in key_stream: 
-        status = {"message" : "ERROR: indirect streams not supported yet"}
-        return (False, status) 
-
-    
-    address = key_stream['qkdm']['address']
-    post_data = {'key_stream_ID' : key_stream_ID, 'indexes' : list(kids_to_be_checked)} 
-    async with http_client.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/check_id", json=post_data) as ret: 
-        ret_val = await ret.json()
-        ret_status = ret_val['status']
-        if ret.status!=200 or ret_status != 0:
+    if 'qkdm' in key_stream:
+        address = key_stream['qkdm']['address']
+        post_data = {'key_stream_ID' : key_stream_ID, 'indexes' : list(kids_to_be_checked)} 
+        async with http_client.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/check_id", json=post_data) as ret: 
+            ret_val = await ret.json()
+            ret_status = ret_val['status']
+            if ret.status!=200 or ret_status != 0:
+                status = {"message" : "ERROR: some kids are not available! "}
+                return (False, status)  
+    else: # indirect 
+        ret = await vault_client.check(f"{config['qks']['id']}/{key_stream['_id']}", akids)
+        if not ret:
             status = {"message" : "ERROR: some kids are not available! "}
-            return (False, status)  
+            return (False, status)   
+
 
     query =  {"_id" : key_stream_ID, "reserved_keys" : {
         "$not" : {
@@ -871,7 +877,9 @@ async def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]
     else: 
         master_key_id = key_stream['indirect_data']['master_key_id']
         await vault_client.remove(config['qks']['id'], master_key_id)
+        await vault_client.remove(config['qks']['id'], key_stream_ID) # delete everything under that stream_id 
         await stream_collection.delete_one({"_id" : key_stream_ID})
+
 
         
         return (True, "direct stream successfully closed") 
