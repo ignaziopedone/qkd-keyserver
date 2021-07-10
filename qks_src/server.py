@@ -281,6 +281,24 @@ async def closeStream(key_stream_ID):
         value = {'message' : "error: invalid content"}
         return value, 400
 
+@app.route(prefix+"streams/<key_stream_ID>/exchange", methods=['POST'])
+async def exchangeIndirectKey(key_stream_ID) : 
+    key_stream_ID = str(key_stream_ID)
+    content = await request.get_json() 
+    try:
+        iv = str(content['iv'])
+        number = int(content['number'])
+        enc_keys = list(content['enc_keys'])
+        ids = list(content['ids'])
+        status, value = await api.exchangeIndirectKey(key_stream_ID, iv, number, enc_keys, ids)
+        if status: 
+            return value, 200
+        else: 
+            return value, 503
+
+    except Exception: 
+        value = {'message' : "error: invalid content"}
+        return value, 400
 
 
 async def main() : 
