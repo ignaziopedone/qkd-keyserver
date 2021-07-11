@@ -14,16 +14,17 @@
 | startQKDMStream       | /api/v1/qkdms/*<qkdm_ID>*/streams         | POST   | admin only |
 | deleteQKDMStreams     | /api/v1/qkdms/*<qkdm_ID>*/streams         | DELETE | admin only |
 | registerQKS           | /api/v1/qks                               | POST   | admin only | 
+| deleteIndirectStream  | /api/v1/qks/*<qks_ID>*/streams?force=     | DELETE | admin only | 
 
 ## External (QKS to QKS) interface 
 
 | method                | path  | action| note  | 
 |-------                | ----  | ------| ----  |
-| reserveKeys           | /api/v1/keys/*<master_SAE_ID>*/reserve  | POST   |       |
-| forwardData           | /api/v1/forward                         | POST   |       |
-| create_stream         | /api/v1/streams                         | POST   |       |
-| close_stream          | /api/v1/streams/*<key_stream_ID>*       | DELETE |       |
- 
+| reserveKeys           | /api/v1/keys/*<master_SAE_ID>*/reserve     | POST   |       |
+| forwardData           | /api/v1/forward                            | POST   |       |
+| create_stream         | /api/v1/streams                            | POST   |       |
+| close_stream          | /api/v1/streams/*<key_stream_ID>*          | DELETE |       |
+| exchangeIndirectKey   | /api/v1/streams/*<key_stream_ID>*/exchange | POST   |       | 
 
 ## Southbound interface :  QKD Module to QKS
 | method                | path  | action| note  | 
@@ -212,6 +213,13 @@
 
 @startjson
 {
+    "**createStream answer**":"",
+    "master_key_id" : "String"
+}
+@endjson
+
+@startjson
+{
     "**closeStream request**":"",
     "source_qks_ID" : "String"
 }
@@ -238,3 +246,13 @@
     "routing_port" : "Integer"
 }
 @endjson
+ 
+@startjson 
+{
+    "**exchangeIndirectKey request**": "", 
+    "iv" : "String", 
+    "number" : "Integer", 
+    "enc_key" : ["String", "..."],
+    "ids" : ["String", "..."]
+}
+@endjson 
