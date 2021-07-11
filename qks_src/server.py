@@ -255,8 +255,10 @@ async def createStream():
         key_stream_ID = str(content['key_stream_ID'])
         stream_type = str(content['type'])
         qkdm_id = str(content['qkdm_id']) if 'qkdm_id' in content else None
+        master_key_id = str(content['master_key_id']) if 'master_key_id' in content else None
+        destination_sae = str(content['destination_sae']) if 'destination_sae' in content else None
 
-        status, value = await api.createStream(source_qks_ID, key_stream_ID, stream_type, qkdm_id)
+        status, value = await api.createStream(source_qks_ID, key_stream_ID, stream_type, qkdm_id, master_key_id, destination_sae)
         if status: 
             return value, 200
         else: 
