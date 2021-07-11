@@ -13,6 +13,8 @@ qks:
   max_key_size: 512
   min_key_size: 128
   max_sae_id_count: 0
+  indirect_key_size: 256
+  indirect_max_key_count: 10
 vault: 
   host : localhost
   port : 8200

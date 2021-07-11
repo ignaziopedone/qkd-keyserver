@@ -26,6 +26,7 @@ http_client : aiohttp.ClientSession = None
 async def getStatus(slave_SAE_ID : str, master_SAE_ID : str) -> tuple[bool, dict] : 
     global mongo_client, http_client, redis_client
     key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
     master_sae_rt = await redis_client.hgetall(master_SAE_ID) #me = await qks_collection.find_one({"_id" : config['qks']['id']})
     if not master_sae_rt or master_sae_rt['dest'] != config['qks']['id']: 
@@ -82,8 +83,40 @@ async def getStatus(slave_SAE_ID : str, master_SAE_ID : str) -> tuple[bool, dict
         return (True, res )
     else: 
         # no stream available. Try to open an indirect connection
-        status = {"message" : "ERROR: This sae is connected but is unreachable: no direct connections are available"}
-        return (False, status)
+        key_stream_ID = str(uuid4())
+        master_key_ID = str(uuid4())
+        post_data = {
+            'source_qks_ID' : config['qks']['id'],
+            'type' : "indirect",
+            'key_stream_ID' : key_stream_ID, 
+            'master_key_ID' : master_key_ID
+        }
+
+        # call createStream on the peer qks 
+        dest_qks = await qks_collection.find_one({"_id" : sae_rt['dest']})
+        dest_qks_ip = dest_qks['address']['ip']
+        dest_qks_port = int(dest_qks['address']['port']) 
+        async with http_client.post(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/streams", json=post_data) as response:
+            if response.status != 200 :
+                status = {"message" : "ERROR: peer QKS unable to create the stream"}
+                return (False, status)
+
+        in_qks = {"id" :  dest_qks['_id'], "address" : dest_qks['address']}
+        key_stream = {"_id" : key_stream_ID, 
+        "dest_qks" : in_qks, 
+        "standard_key_size" : config['qks']['indirect_key_size'], 
+        "max_key_count" : config['qks']['indirect_max_key_count'],
+        "reserved_keys" : [], 
+        "indirect_data" : {"master_key_id" : master_key_ID, "available_keys" : -1}
+        }
+
+        await key_stream_collection.insert_one(key_stream)
+
+        res['key_size'] = key_stream['standard_key_size']
+        res['max_key_count'] = key_stream['max_key_count']
+        res['stored_key_count'] = key_stream['indirect_data']['available_keys']
+        
+        return (True, res)
  
 
 
@@ -250,7 +283,10 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
         key = b64encode(byte_key[0:(key_size//8)]).decode()
         res['keys'].append({'key_ID' : AKID, 'key' : key}) # key joined as bytearray, return as b64 string 
         
-    await key_stream_collection.update_one({"_id" : key_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : {"$in" : used_AKIDs}}}})
+    update_query = {"$pull" : {"reserved_keys" : {"AKID" : {"$in" : used_AKIDs}}}}
+    if 'qkdm' not in key_stream: 
+        update_query["$inc"] = {"indirect_data.available_keys" : -len(chunks)}
+    await key_stream_collection.update_one({"_id" : key_stream['_id']}, update_query)
     return (True, res)
         
 async def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str) -> tuple[bool, dict] :
@@ -926,10 +962,9 @@ async def exchangeIndirectKey(key_stream_ID : str, iv_b64 : str, number : int , 
         data = {id : key_b64}
         res = await  vault_client.writeOrUpdate(f"{config['qks']['id']}/{key_stream['_id']}", id, data)  
 
+    await stream_collection.update_one({"_id" : key_stream_ID}, {"$inc" : {"indirect_data.available_keys" : number}})
     status = {"message" : "keys saved successfully"}
     return True, status 
-
-
 
 
 # MANAGEMENT FUNCTIONS

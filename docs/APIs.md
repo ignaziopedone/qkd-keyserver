@@ -208,6 +208,7 @@
     "key_stream_ID" : "String (uuid4)",
     "qkdm_id" : "String",
     "type" : "String"
+    "master_key_ID" : "String" 
 }
 @endjson
 
