@@ -18,8 +18,8 @@ qks:
 vault: 
   host : localhost
   port : 8200
-  token : s.j2UdmgzJjX8gNf2YK2NOFlo2
-  key64 : 537ucc/oY+BSqV2CdG97PjFifpMKhS630nuHKyUkdJM=
+  token : s.GOmImSNVdcHZ5sAYIc7MyflC
+  key64 : yt3uzY0g\bsAvaJ8Ax30yAUfsnksOqOJIujtoBR6gBU=
 redis: 
   user: root
   password: password 
