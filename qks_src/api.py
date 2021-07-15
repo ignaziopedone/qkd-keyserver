@@ -1085,7 +1085,7 @@ async def init_server(config_file = "qks_src/config_files/config.yaml") -> tuple
     global mongo_client, vault_client, config, http_client, redis_client
 
     config_file = open(config_file, 'r')
-    config : dict = yaml.safe_load(config_file)
+    config = yaml.safe_load(config_file)
     config_file.close()
 
     test_mongo_client = MongoClient(f"mongodb://{config['mongo_db']['user']}:{config['mongo_db']['password']}@{config['mongo_db']['host']}:{config['mongo_db']['port']}/admin?authSource={config['mongo_db']['auth_src']}")
