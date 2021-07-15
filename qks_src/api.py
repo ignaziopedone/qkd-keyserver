@@ -1080,11 +1080,11 @@ async def exchangeIndirectKey(key_stream_ID : str, iv_b64 : str, number : int , 
 
 
 # MANAGEMENT FUNCTIONS
-async def init_server(config_file = "qks_src/config_files/config.yaml") -> tuple[bool, int ] : 
+async def init_server(config_file_name = "qks_src/config_files/config.yaml") -> tuple[bool, int ] : 
     # check that the qks can access admin DB with root credentials  
     global mongo_client, vault_client, config, http_client, redis_client
 
-    config_file = open(config_file, 'r')
+    config_file = open(config_file_name, 'r')
     config = yaml.safe_load(config_file)
     config_file.close()
 
@@ -1099,11 +1099,13 @@ async def init_server(config_file = "qks_src/config_files/config.yaml") -> tuple
     # check that the qks can access vault  
     try: 
         vault_client = VaultClient(config['vault']['host'], config['vault']['port'], config['vault']['token']) 
-        if (await vault_client.connect()) : 
+        res = await vault_client.connect()
+        if res : 
             await vault_client.createEngine(config['qks']['id'])
         else: 
             return (False, -1)
-    except Exception: 
+    except Exception as e: 
+        print(e)
         return (False, -1)
 
     

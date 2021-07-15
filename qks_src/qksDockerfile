@@ -13,5 +13,5 @@ RUN python -m pip install -r qks_src/requirements.txt
 
 EXPOSE 4000 
  
-ENTRYPOINT [ "python", "qks_src/server.py"]
+ENTRYPOINT [ "python", "-u", "qks_src/server.py"]
 CMD ["qks_src/config_files/config.yaml"]
