@@ -12,9 +12,7 @@ import aiohttp #import requests
 from motor.motor_asyncio import AsyncIOMotorClient as MongoClient # from pymongo import MongoClient, ReturnDocument
 import aioredis
 
-config_file = open("qks_src/config_files/config.yaml", 'r')
-config : dict = yaml.safe_load(config_file)
-config_file.close()
+config : dict = {} 
 
 mongo_client : MongoClient = None # once it has been initialized all APIs use the same client
 vault_client : VaultClient = None 
@@ -1082,9 +1080,14 @@ async def exchangeIndirectKey(key_stream_ID : str, iv_b64 : str, number : int , 
 
 
 # MANAGEMENT FUNCTIONS
-async def init_server() -> tuple[bool, int ] : 
+async def init_server(config_file = "qks_src/config_files/config.yaml") -> tuple[bool, int ] : 
     # check that the qks can access admin DB with root credentials  
     global mongo_client, vault_client, config, http_client, redis_client
+
+    config_file = open(config_file, 'r')
+    config : dict = yaml.safe_load(config_file)
+    config_file.close()
+
     test_mongo_client = MongoClient(f"mongodb://{config['mongo_db']['user']}:{config['mongo_db']['password']}@{config['mongo_db']['host']}:{config['mongo_db']['port']}/admin?authSource={config['mongo_db']['auth_src']}")
 
     try: 

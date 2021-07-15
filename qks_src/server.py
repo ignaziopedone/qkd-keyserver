@@ -2,6 +2,7 @@ from quart import request, Quart
 import asyncio
 import api
 import nest_asyncio
+import sys
 
 nest_asyncio.apply()
 app = Quart(__name__)
@@ -306,11 +307,14 @@ async def exchangeIndirectKey(key_stream_ID) :
 async def main() : 
     global app, serverPort
             
+    config_file = sys.argv[1] if len(sys.argv) == 2 else None
+
     # check db and vault init 
-    status, serverPort = await api.init_server()
+    status, serverPort = await api.init_server(config_file)
     if not status: 
         print("ERROR : unable to init DB or Vault ")
         return  
+
 
     print("SUCCESSFULL INIT: server starting on port", serverPort)
     app.run(host='0.0.0.0', port=serverPort, loop = asyncio.get_event_loop())
