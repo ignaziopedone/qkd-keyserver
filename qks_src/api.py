@@ -1093,7 +1093,8 @@ async def init_server(config_file_name = "qks_src/config_files/config.yaml") -> 
     try: 
         await test_mongo_client.list_database_names()
         mongo_client = MongoClient(f"mongodb://{config['mongo_db']['user']}:{config['mongo_db']['password']}@{config['mongo_db']['host']}:{config['mongo_db']['port']}/{config['mongo_db']['db']}?authSource={config['mongo_db']['auth_src']}")
-    except Exception: 
+    except Exception as e: 
+        print("mongodb exception:", e)
         return (False, 0) 
 
     # check that the qks can access vault  
@@ -1105,7 +1106,7 @@ async def init_server(config_file_name = "qks_src/config_files/config.yaml") -> 
         else: 
             return (False, -1)
     except Exception as e: 
-        print(e)
+        print("vault exception:", e)
         return (False, -1)
 
     
@@ -1114,7 +1115,8 @@ async def init_server(config_file_name = "qks_src/config_files/config.yaml") -> 
         redis_client = aioredis.from_url(f"redis://{config['redis']['host']}:{config['redis']['port']}/{config['redis']['db']}", username=config['redis']['user'], password=config['redis']['password'], decode_responses=True)
         if not (await redis_client.ping()) : 
             return (False, -1)
-    except Exception: 
+    except Exception as e: 
+        print("redis exception:", e)
         return (False, -1)
 
     http_client = aiohttp.ClientSession()
