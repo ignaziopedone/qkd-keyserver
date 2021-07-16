@@ -7,12 +7,12 @@ mongo_db:
   db : qks1_db
 qks:
   id: qks1
-  ip: 172.18.0.250
+  ip: 172.18.0.181
   port: 4000
 routing: 
   timer : 20
   port : 7000
-  ip: 172.18.0.150
+  ip: 172.18.0.161
 redis: 
   user: root
   password: password 

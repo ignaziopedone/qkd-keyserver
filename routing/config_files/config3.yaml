@@ -1,5 +1,5 @@
 mongo_db:
-  host: localhost
+  host: 172.18.0.10
   port: 27017
   user: rootuser
   password: rootpwd
@@ -7,16 +7,16 @@ mongo_db:
   db : qks3_db
 qks:
   id: qks3
-  ip: 127.0.0.1
+  ip: 172.18.0.183
   port: 4001
 routing: 
   timer : 20
   port : 7001
-  ip: 127.0.0.1
+  ip: 172.18.0.163
 redis: 
   user: root
   password: password 
   topic: register3 
-  host: localhost 
+  host: 172.18.0.30 
   port: 6379
   db : 3
