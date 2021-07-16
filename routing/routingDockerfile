@@ -14,4 +14,4 @@ RUN python -m pip install -r requirements.txt
 EXPOSE 7000 
  
 ENTRYPOINT [ "python", "-u", "routing/asyncRoutingApp.py"]
-CMD ["routing/config.yaml"]
+CMD ["routing/config_files/config.yaml"]

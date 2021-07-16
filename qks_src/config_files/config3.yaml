@@ -4,11 +4,11 @@ mongo_db:
   user: rootuser
   password: rootpwd
   auth_src : admin
-  db : qks2_db
+  db : qks3_db
 qks:
-  id: qks2
+  id: qks3
   ip: 127.0.0.1
-  port: 4001
+  port: 4002
   max_key_per_request: 10
   max_key_size: 512
   min_key_size: 128

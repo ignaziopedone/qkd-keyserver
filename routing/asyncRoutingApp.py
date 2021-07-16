@@ -331,7 +331,7 @@ async def main() :
     if len(sys.argv) == 2: 
         filename = sys.argv[1] 
     else: 
-        filename =  "routing/config.yaml"
+        filename =  "routing/config_files/config.yaml"
     config_file = open(filename, 'r')
     config = yaml.safe_load(config_file)
     config_file.close() 

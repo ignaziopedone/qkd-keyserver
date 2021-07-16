@@ -1,0 +1,22 @@
+mongo_db:
+  host: localhost
+  port: 27017
+  user: rootuser
+  password: rootpwd
+  auth_src : admin
+  db : qks2_db
+qks:
+  id: qks2
+  ip: 127.0.0.1
+  port: 4001
+routing: 
+  timer : 20
+  port : 7001
+  ip: 127.0.0.1
+redis: 
+  user: root
+  password: password 
+  topic: register2 
+  host: localhost 
+  port: 6379
+  db : 2
