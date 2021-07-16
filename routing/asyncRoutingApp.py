@@ -232,7 +232,10 @@ async def lsaUpdate() :
         n += 1
         await asyncio.sleep(timer)
         print(f"LSA UPDATE : sending periodic update {n}")
-        await updateRouting()
+        if n == 1: 
+            await updateRouting('force')
+        else: 
+            await updateRouting()
         await sendSocket(me, 'K', time.time())
         await sendSocket(me, 'S', time.time())
         

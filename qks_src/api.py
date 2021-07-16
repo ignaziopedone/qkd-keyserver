@@ -377,7 +377,7 @@ async def registerSAE(sae_ID: str) -> tuple[bool, dict]:
 
 async def unregisterSAE(sae_ID: str) -> tuple[bool, dict]: 
     global mongo_client, config, redis_client
-    qks_collection = await mongo_client[config['mongo_db']['db']]['quantum_key_servers']
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
     sae_rt = await redis_client.hgetall(sae_ID)
     if not sae_rt or sae_rt['dest'] != config['qks']['id']: 
