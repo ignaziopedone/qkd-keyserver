@@ -19,4 +19,4 @@ redis:
   topic: register1 
   host: 172.18.0.30 
   port: 6379
-  db : qks1
+  db : 1
