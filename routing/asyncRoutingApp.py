@@ -307,6 +307,10 @@ async def initData() -> bool :
                     graph.add_node(n)
                     graph.add_link(n, qks['_id'], cost_param['c0'])
 
+        init_data = {"connected_sae" : [], "neighbor_qks" : []}
+        address_data = {"address" : {"ip" : config['qks']['ip'], "port" : config['qks']['port']}, "routing_address" : {"ip" : config['routing']['ip'], "port" : config['routing']['port']}, "$setOnInsert" : init_data}
+        qks_collection.update_one({"_id" : config['qks']['id']}, address_data, upsert=True )
+
     except Exception: 
         return False 
 
@@ -324,7 +328,7 @@ async def main() :
     if len(sys.argv) == 2: 
         filename = sys.argv[1] 
     else: 
-        filename =  "routing/config2.yaml"
+        filename =  "routing/config.yaml"
     config_file = open(filename, 'r')
     config = yaml.safe_load(config_file)
     config_file.close() 

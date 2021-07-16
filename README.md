@@ -1,5 +1,7 @@
 # QKD key server 2.0
 
+# TO BE UPDATED
+
 ## files and modules 
 ### qks_src 
 This folder contains all files related with qks code. 
@@ -14,6 +16,8 @@ This folder contains all files related with qks code.
 ## routing_test 
 This folder contains old files related to routing algorithm development and timing results obtained during tests. 
 
+## routing
+
 ## docs
 This folder contains project APIs, DB and sequence diagram documentation as pictures and as plantUML code. 
 QKDM docs can be found in qkdm repository 
@@ -22,15 +26,14 @@ QKDM docs can be found in qkdm repository
 simple file with some http requests for testing purposes 
 
 # TODO 
-* [ ] indirect communication 
+* [x] indirect communication 
     * [x] routing process and routing algorithm 
     * [x] redis usage for routing tables and SAE info
     * [x] forwardData implementation 
     * [x] dinamic cost for routes -> routing talks to qkd modules
-    * [ ] indirect stream support 
+    * [x] indirect stream support 
 * [ ] reserve key relaxed version (return reserved key list even if some are not reservable, not only a bool)
-* [ ] support for more than one couple of qkd modules between 2 qks (??) 
 * [ ] managin secrets with Dockert and not in clear in config files 
-* [ ] implementing loggin with support to gunicorn (for multiprocessing) 
+* [ ] implementing loggin with support to hypercorn (for multiprocessing) 
 * [x] moving to asyncio and Quart, Hypercorn and Motor (replacing Flask, Gunicorn and PyMongo) to improve performances
 

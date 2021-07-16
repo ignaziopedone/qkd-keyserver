@@ -11,7 +11,7 @@ RUN git checkout async
 
 RUN python -m pip install -r requirements.txt
 
-EXPOSE 4000 
+EXPOSE 7000 
  
-ENTRYPOINT [ "python", "-u", "qks_src/server.py"]
-CMD ["qks_src/config_files/config.yaml"]
+ENTRYPOINT [ "python", "-u", "routing/asyncRoutingApp.py"]
+CMD ["routing/config.yaml"]

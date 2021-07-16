@@ -48,14 +48,26 @@ services:
             frontend:
                 ipv4_address: 172.16.1.30
 
-    qksA:
-        image: qks:async 
+    qks1:
+        image: qks:async
         container_name : qks_1
         ports: 
             - 4000:4000 
+        command: qks_src/config_files/config.yaml
         networks: 
             frontend: 
                 ipv4_address: 172.16.1.250
+
+    routing1:
+        image: routing:async
+        container_name : routing_1
+        ports: 
+            - 4000:4000 
+        command: routing/config.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.16.1.150    
+
 
 
     

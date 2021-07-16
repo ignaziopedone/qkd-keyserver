@@ -16,6 +16,12 @@ prefix = "/api/v1"
 async def getStatus(slave_SAE_ID):
     slave_SAE_ID = str(slave_SAE_ID)
     master_SAE_ID = None # TODO: get it from authentication! 
+    master_SAE_ID = request.args.get('master_SAE_ID')
+
+    if master_SAE_ID is None: 
+        value = {'message' : "bad request: request param master_SAE_ID is missing"}
+        return value, 400 
+
     status, value = await api.getStatus(slave_SAE_ID, master_SAE_ID)
     if status: 
         return value, 200
@@ -28,8 +34,9 @@ async def getKey(slave_SAE_ID):
     slave_SAE_ID = str(slave_SAE_ID)
     master_SAE_ID = None # TODO: get it from authentication! 
     content = await request.get_json()
+    
     try: 
-        master_SAE_ID = content['master_SAE_ID'] # TO BE REMOVED
+        master_SAE_ID = str(content['master_SAE_ID']) # TO BE REMOVED
         number = int(content['number']) if 'number' in content else 1
         key_size = int(content['size']) if 'size' in content else None
         extension_mandatory = content['extension_mandatory'] if 'extension_mandatory' in content else None
@@ -49,6 +56,7 @@ async def getKeyWithKeyIDs(master_SAE_ID):
     content = await request.get_json() 
     try:      
         key_IDs = list(content['key_IDs'])
+        slave_SAE_ID = str(content['slave_SAE_ID'])
         status, value = await api.getKeyWithKeyIDs(master_SAE_ID, key_IDs, slave_SAE_ID)
         if status: 
             return value, 200
@@ -137,7 +145,6 @@ async def deleteQKDMStreams(qkdm_ID) :
         return value, 503
     
 
-
 @app.route(prefix+"/qks", methods=['POST'])
 async def registerQKS(): 
     content = await request.get_json()
@@ -154,7 +161,7 @@ async def registerQKS():
             return value, 200
         else: 
             return value, 503
-    except Exception:
+    except Exception as e:
         value = {'message' : "error: invalid content"}
         return value, 400
 
