@@ -308,7 +308,7 @@ async def initData() -> bool :
                     graph.add_link(n, qks['_id'], cost_param['c0'])
 
         init_data = {"connected_sae" : [], "neighbor_qks" : []}
-        address_data = {"address" : {"ip" : config['qks']['ip'], "port" : config['qks']['port']}, "routing_address" : {"ip" : config['routing']['ip'], "port" : config['routing']['port']}, "$setOnInsert" : init_data}
+        address_data = {"$set" : {"address" : {"ip" : config['qks']['ip'], "port" : config['qks']['port']}, "routing_address" : {"ip" : config['routing']['ip'], "port" : config['routing']['port']}}, "$setOnInsert" : init_data}
         qks_collection.update_one({"_id" : config['qks']['id']}, address_data, upsert=True )
 
     except Exception: 

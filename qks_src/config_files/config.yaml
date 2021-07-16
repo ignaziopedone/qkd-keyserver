@@ -1,5 +1,5 @@
 mongo_db:
-  host: 172.16.1.10
+  host: 172.18.0.10
   port: 27017
   user: rootuser
   password: rootpwd
@@ -7,7 +7,7 @@ mongo_db:
   db : qks1_db
 qks:
   id: qks1
-  ip: 172.16.1.250
+  ip: 172.18.0.250
   port: 4000
   max_key_per_request: 10
   max_key_size: 512
@@ -16,7 +16,7 @@ qks:
   indirect_key_size: 256
   indirect_max_key_count: 10
 vault: 
-  host : 172.16.1.20
+  host : 172.18.0.20
   port : 8200
   token : s.G8b0bLPI35KA8yhBWCAfNgA5
   key64 : ZNUv2gMf1sNz0QdnB6+z+buP2sYz53VcYsuax9rl9es=
@@ -24,6 +24,6 @@ redis:
   user: root
   password: password 
   topic: register1 
-  host: 172.16.1.30
+  host: 172.18.0.30
   port: 6379
   db : qks1
