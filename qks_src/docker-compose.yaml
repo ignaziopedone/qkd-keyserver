@@ -1,5 +1,13 @@
 version: "3.9"
 
+networks:
+    frontend:
+      ipam:
+        config:
+          - subnet: 172.16.1.0/24
+
+
+
 services: 
     db: 
         image: mongo:latest
@@ -10,6 +18,9 @@ services:
             MONGO_INITDB_ROOT_USERNAME : rootuser
             MONGO_INITDB_ROOT_PASSWORD : rootpwd
             MONGO_INITDB_DATABASE: admin
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.10
 
     vault:
         image: vault
@@ -21,6 +32,9 @@ services:
         cap_add:
             - IPC_LOCK
         entrypoint: vault server -config=/vault/config/vault_config.json
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.20
 
     redis: 
         image: redis 
@@ -30,6 +44,18 @@ services:
         volumes: 
             - ./config_files/redis.conf:/usr/local/etc/redis/redis.conf
         command: redis-server /usr/local/etc/redis/redis.conf
+        networks:
+            frontend:
+                ipv4_address: 172.16.1.30
+
+    qksA:
+        image: qks:async 
+        container_name : qks_1
+        ports: 
+            - 4000:4000 
+        networks: 
+            frontend: 
+                ipv4_address: 172.16.1.250
 
 
     
