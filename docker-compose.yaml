@@ -8,7 +8,7 @@ networks:
 
 
 services: 
-    db: 
+    db:
         image: mongo:latest
         container_name: mongo_auth
         ports: 
@@ -47,29 +47,110 @@ services:
             frontend:
                 ipv4_address: 172.18.0.30
 
+    ##### QKS 1 SERVICES 
     qks1:
         image: qks:async
         container_name : qks_1
         ports: 
-            - 4000:4000 
+            - 4001:4000 
         command: qks_src/config_files/config.yaml
         networks: 
             frontend: 
-                ipv4_address: 172.18.0.250
+                ipv4_address: 172.18.0.181
 
     routing1:
         image: routing:async
         container_name : routing_1
         ports: 
-            - 7000:7000 
-        command: routing/config.yaml
+            - 7001:7000 
+        command: routing/config_files/config.yaml
         networks: 
             frontend: 
-                ipv4_address: 172.18.0.150  
-
-
-
-            
-            
+                ipv4_address: 172.18.0.161 
     
+    qkdm1:
+        image: qkdm:async
+        container_name : qkdm_1
+        ports: 
+            - 5001:5000 
+            - 6001:6000
+        command: qkdm_src/config_files/config.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.101
+
+    ##### QKS 2 SERVICES 
+    qks2:
+        image: qks:async
+        container_name : qks_2
+        ports: 
+            - 4002:4000 
+        command: qks_src/config_files/config2.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.182
+
+    routing2:
+        image: routing:async
+        container_name : routing_2
+        ports: 
+            - 7002:7000 
+        command: routing/config_files/config2.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.162 
     
+    qkdm2a:
+        image: qkdm:async
+        container_name : qkdm_2a
+        ports: 
+            - 5002:5000 
+            - 6002:6000
+        command: qkdm_src/config_files/config2a.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.102
+
+    qkdm2b:
+        image: qkdm:async
+        container_name : qkdm_2b
+        ports: 
+            - 5000:5000 
+            - 6000:6000
+        command: qkdm_src/config_files/config2b.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.100
+
+    ##### QKS 3 SERVICES
+    qks3:
+        image: qks:async
+        container_name : qks_3
+        ports: 
+            - 4003:4000 
+        command: qks_src/config_files/config3.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.183
+
+    routing3:
+        image: routing:async
+        container_name : routing_3
+        ports: 
+            - 7003:7000 
+        command: routing/config_files/config3.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.163 
+    
+    qkdm3:
+        image: qkdm:async
+        container_name : qkdm_3
+        ports: 
+            - 5003:5000 
+            - 6003:6000
+        command: qkdm_src/config_files/config3.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.103
+
