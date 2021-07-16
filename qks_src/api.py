@@ -1091,9 +1091,7 @@ async def init_server(config_file_name = "qks_src/config_files/config.yaml") -> 
     try: 
         await test_mongo_client.list_database_names()
         mongo_client = MongoClient(f"mongodb://{config['mongo_db']['user']}:{config['mongo_db']['password']}@{config['mongo_db']['host']}:{config['mongo_db']['port']}/{config['mongo_db']['db']}?authSource={config['mongo_db']['auth_src']}")
-        qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
-        qks_collection.update_one({"_id" : config['qks']['id']}, {}, upsert=True)
-    except Exception as e: 
+    except Exception as e:  
         print("mongodb exception:", e)
         return (False, 0) 
 

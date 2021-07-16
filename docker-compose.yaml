@@ -4,8 +4,7 @@ networks:
     frontend:
       ipam:
         config:
-          - subnet: 172.16.1.0/24
-
+          - subnet: 172.18.0.0/24
 
 
 services: 
@@ -20,7 +19,7 @@ services:
             MONGO_INITDB_DATABASE: admin
         networks:
             frontend:
-                ipv4_address: 172.16.1.10
+                ipv4_address: 172.18.0.10
 
     vault:
         image: vault
@@ -28,13 +27,13 @@ services:
         ports:
             - 8200:8200
         volumes:
-            - ./config_files/vault_config.json:/vault/config/vault_config.json
+            - ./qks_src/config_files/vault_config.json:/vault/config/vault_config.json
         cap_add:
             - IPC_LOCK
         entrypoint: vault server -config=/vault/config/vault_config.json
         networks:
             frontend:
-                ipv4_address: 172.16.1.20
+                ipv4_address: 172.18.0.20
 
     redis: 
         image: redis 
@@ -42,11 +41,11 @@ services:
         ports:
             - 6379:6379
         volumes: 
-            - ./config_files/redis.conf:/usr/local/etc/redis/redis.conf
+            - ./qks_src/config_files/redis.conf:/usr/local/etc/redis/redis.conf
         command: redis-server /usr/local/etc/redis/redis.conf
         networks:
             frontend:
-                ipv4_address: 172.16.1.30
+                ipv4_address: 172.18.0.30
 
     qks1:
         image: qks:async
@@ -56,19 +55,21 @@ services:
         command: qks_src/config_files/config.yaml
         networks: 
             frontend: 
-                ipv4_address: 172.16.1.250
+                ipv4_address: 172.18.0.250
 
     routing1:
         image: routing:async
         container_name : routing_1
         ports: 
-            - 4000:4000 
+            - 7000:7000 
         command: routing/config.yaml
         networks: 
             frontend: 
-                ipv4_address: 172.16.1.150    
+                ipv4_address: 172.18.0.150  
 
 
 
+            
+            
     
     
