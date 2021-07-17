@@ -26,4 +26,4 @@ redis:
   topic: register2 
   host: 172.18.0.30
   port: 6379
-  db : 2
+  db : 3
