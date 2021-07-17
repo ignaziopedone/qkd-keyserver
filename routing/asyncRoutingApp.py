@@ -233,7 +233,7 @@ async def lsaUpdate() :
         await asyncio.sleep(timer)
         if (n % 10 == 0): 
             print(f"LSA UPDATE : sending periodic update {n}")
-            print(graph)
+            graph.print_nodes
         if n == 1: 
             await updateRouting('force')
         else: 
