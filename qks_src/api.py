@@ -88,7 +88,7 @@ async def getStatus(slave_SAE_ID : str, master_SAE_ID : str) -> tuple[bool, dict
             'type' : "indirect",
             'key_stream_ID' : key_stream_ID, 
             'master_key_ID' : master_key_ID,
-            'destination_sae' : slave_SAE_ID
+            'destination_sae' : master_SAE_ID
         }
 
         # call createStream on the peer qks 
@@ -97,7 +97,8 @@ async def getStatus(slave_SAE_ID : str, master_SAE_ID : str) -> tuple[bool, dict
         dest_qks_port = int(dest_qks['address']['port']) 
         async with http_client.post(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/streams", json=post_data) as response:
             if response.status != 200 :
-                status = {"message" : "ERROR: peer QKS unable to create the stream"}
+                status = {"message" : "ERROR: peer QKS unable to create the stream",
+                    "details" : (await response.json())}
                 return (False, status)
 
         in_qks = {"id" :  dest_qks['_id'], "address" : dest_qks['address']}
@@ -774,7 +775,7 @@ async def forwardData(data:str, decryption_key_id:str, decryption_key_stream:str
             status = {'message' : "ERROR: unable to forward, there isn't an available stream to the next hop! "}
             return False, status
         
-        key_chunks : int = AES.key_size[2] / forward_stream['standard_key_size']
+        key_chunks = int(ceil(float(AES.key_size[2]*8) / forward_stream['standard_key_size'] )  ) 
 
         address = forward_stream['qkdm']['address']
         async with http_client.get(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/get_id/{forward_stream['_id']}?count=-1") as ret: 
@@ -815,7 +816,7 @@ async def forwardData(data:str, decryption_key_id:str, decryption_key_stream:str
         post_data = {
             "key_stream_ID" : forward_stream['_id'],
             "slave_SAE_ID" : f"QKS_{next_hop}", 
-            "key_size" : AES.key_size[2],
+            "key_size" : AES.key_size[2]*8,
             "key_ID_list" : element_to_send
         }
 
@@ -889,10 +890,11 @@ async def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qk
 
         forward_stream = await stream_collection.find_one({"dest_qks.id" : next_hop, "qkdm" : {"$exists" : True}}) 
         if forward_stream is None: 
-            status = {'message' : "ERROR: unable to forward, there isn't an available stream to the next hop! "}
+            status = {'message' : f"ERROR: unable to forward, there isn't an available stream to the next hop {next_hop}! "}
             return False, status
         
-        key_chunks : int = AES.key_size[2] / forward_stream['standard_key_size']
+        
+        key_chunks = int(ceil(float(AES.key_size[2]*8) / forward_stream['standard_key_size'] )  ) 
 
         address = forward_stream['qkdm']['address']
         async with http_client.get(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/get_id/{forward_stream['_id']}?count=-1") as ret: 
@@ -932,7 +934,7 @@ async def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qk
         post_data = {
             "key_stream_ID" : forward_stream['_id'],
             "slave_SAE_ID" : f"QKS_{next_hop}", 
-            "key_size" : AES.key_size[2],
+            "key_size" : AES.key_size[2]*8,
             "key_ID_list" : element_to_send
         }
 
@@ -941,7 +943,7 @@ async def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qk
         async with http_client.post(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/keys/QKS_{config['qks']['id']}/reserve", json=post_data) as response:
             if response.status != 200: 
                 status = {"message" : "ERROR: peer qks unable to reserve keys", 
-                "peer_message" : str(await response.text)}
+                "peer_message" : str(await response.json())}
                 await stream_collection.update_one({"_id" : forward_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : AKID}}})
                 return (False, status)
 
@@ -979,7 +981,7 @@ async def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qk
         async with http_client.post(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/forward", json=post_data) as response:
             if response.status == 200: 
                 status = {"message" : "ERROR: error in forward chain", 
-                "peer_message" : str(await response.text)}
+                "peer_message" : str(await response.text())}
                 return (False, status) 
         
         in_qks = {"id" :  source_qks['_id'], "address" : source_qks['address']}
