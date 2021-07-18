@@ -161,7 +161,7 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
         status = {"message" : "ERROR: there are not direct connection to this SAE. Try asking for an indirect one ! "}
         return (False, status) 
    
-    key_stream = key_stream_collection.find_one({"dest_qks.id" : slave_sae_rt['dest'], "qkdm" : {"$exists" : qkdm_exists}}) 
+    key_stream = await key_stream_collection.find_one({"dest_qks.id" : slave_sae_rt['dest'], "qkdm" : {"$exists" : qkdm_exists}}) 
 
     if key_stream is None:
         status = {"message" : "ERROR: there are no streams to reach requeted SAE", 
@@ -256,7 +256,7 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
             post_data = {'key_stream_ID' : key_stream['_id'], 'indexes' : kids}
             async with http_client.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/get_key", json=post_data) as ret: 
                 ret_val = await ret.json()
-                ret_status_code = ret.status()
+                ret_status_code = ret.status
         
             if ret_val['status'] != 0 or ret_status_code != 200: 
                 status = {"message" : "ABORT : THIS SHOULD NOT HAPPEN! there is someone else which is not this QKS that is using the QKDM!"}
@@ -454,13 +454,16 @@ async def startQKDMStream(qkdm_ID:str) -> tuple[bool, dict] :
         "qkdm" : in_qkdm
     }
     await key_stream_collection.insert_one(key_stream)
+    await qks_collection.update_one({"_id" : config['qks']['id']}, { "$addToSet": { "neighbor_qks": in_qks["id"]  }})
+    await qks_collection.update_one({"_id" : in_qks["id"]}, { "$addToSet": { "neighbor_qks": config['qks']['id']  }})
     await redis_client.publish(f"{config['redis']['topic']}-link", f"add-{dest_qks['_id']}")
     status = {"message" : f"OK: stream {key_stream_ID} started successfully"}
     return (True, status)
         
 async def deleteQKDMStreams(qkdm_ID:str) -> tuple[bool, dict] : 
     global mongo_client, config, http_client, redis_client
-    key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams'] 
+    key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']  
     
     key_stream = await key_stream_collection.find_one({"qkdm.id" : qkdm_ID})
     if key_stream is None: 
@@ -488,6 +491,8 @@ async def deleteQKDMStreams(qkdm_ID:str) -> tuple[bool, dict] :
         ret_val = await ret.json()
         ret_status = ret_val['status']
         await key_stream_collection.delete_one({"_id" : key_stream_ID})
+        await qks_collection.update_one({ "_id": config['qks']['id'] }, { "$pull": { "neighbor_qks": key_stream['dest_qks']['id']  }})
+        await qks_collection.update_one({ "_id": key_stream['dest_qks']['id']  }, { "$pull": { "neighbor_qks": config['qks']['id'] }})
         if ret_status == 0 and ret.status == 200:
             status = {"message" : f"OK: stream {key_stream_ID} closed successfully"}
         else: 
@@ -615,7 +620,12 @@ async def registerQKDM(qkdm_ID:str, protocol:str, qkdm_ip:str, qkdm_port:int, re
 async def unregisterQKDM(qkdm_ID:str) -> tuple[bool, dict]: 
     global mongo_client, vault_client, config
     qkdms_collection = mongo_client[config['mongo_db']['db']]['qkd_modules'] 
+    key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams'] 
     
+    if await key_stream_collection.find_one({"qkdm.id" : qkdm_ID}) is not None: 
+        value = {'message' : "ERROR: there are active streams for this QKDM! Please close them before unregister"}
+        return (False, value)
+
     if await qkdms_collection.find_one({"_id" : qkdm_ID}) is None: 
         value = {'message' : "ERROR: QKDM not found on this host"}
         return (False, value)
@@ -1000,6 +1010,8 @@ async def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qk
                     dest_qks = {"id" : source_qks_ID, "address" : source_qks['address']}
                     new_stream = {"_id" : key_stream_ID, "dest_qks" : dest_qks, "reserved_keys" : [], "qkdm" : in_qkdm, "standard_key_size" : selected_qkdm['parameters']['standard_key_size'], "max_key_count" : selected_qkdm['parameters']['max_key_count']}
                     await stream_collection.insert_one(new_stream)
+                    await qks_collection.update_one({"_id" : config['qks']['id']}, { "$addToSet": { "neighbor_qks": dest_qks["id"]  }})
+                    await qks_collection.update_one({"_id" : dest_qks["id"]}, { "$addToSet": { "neighbor_qks": config['qks']['id']  }})
                     await redis_client.publish(f"{config['redis']['topic']}-link", f"add-{source_qks_ID}")
                     value = {'message' : "stream successfully created"}
                     return (True, value)
@@ -1014,6 +1026,7 @@ async def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qk
 async def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]:
     global mongo_client, config, http_client, vault_client
     stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
     
     key_stream =  await stream_collection.find_one({"_id" : key_stream_ID, "dest_qks.id" : source_qks_ID}) 
     if key_stream is None:
@@ -1028,6 +1041,8 @@ async def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]
             ret_status = ret_val['status']
             if ret_status == 0 and ret.status == 200: 
                 await stream_collection.delete_one({"_id" : key_stream_ID})
+                await qks_collection.update_one({ "_id": config['qks']['id'] }, { "$pull": { "neighbor_qks": key_stream['dest_qks']['id']  }})
+                await qks_collection.update_one({ "_id": key_stream['dest_qks']['id']  }, { "$pull": { "neighbor_qks": config['qks']['id'] }})
                 await redis_client.publish(f"{config['redis']['topic']}-link", f"remove-{source_qks_ID}")
                 value = {'message' : "direct stream successfully closed"}
                 return (True, value)
