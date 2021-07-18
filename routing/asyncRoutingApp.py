@@ -18,23 +18,22 @@ redis_client : aioredis.Redis = None
 mongo_client : MongoClient = None 
 http_client : aiohttp.ClientSession = None
 config : dict = {}
-cost_param = {'c0' : 20, 'c1' : -10, 'c2' : -5}
+cost_param = {'c0' : 100, 'c1' : -50, 'c2' : -25}
 qkdm_availability = {}
 
 def nextPowerOf2(x : int) -> int :  
     return 1 if x == 0 else 2**(x - 1).bit_length()
 
-def routeCost(old: int, new: int, tot : int) -> float  : 
+def routeCost(old: int, new: int, tot : int) -> int  : 
     global cost_param
     delta : int = ( new - old ) 
     cost : float = cost_param['c0'] + cost_param['c1'] * ( new / tot ) + cost_param['c2'] * ( delta / tot ) 
-    return cost 
+    return int(cost )
 
 async def updateLinkCosts(): 
     global mongo_client, http_client , config, qkdm_availability, graph
 
     streams_collection = mongo_client[config['mongo_db']['db']]['key_streams']
-
 
     async for stream in (streams_collection.find({"qkdm" : {"$exists" : True}})) : 
         address = stream['qkdm']['address']
@@ -45,12 +44,11 @@ async def updateLinkCosts():
             else: 
                 new_av = 0    
             qkdm_id = stream['qkdm']['id']
-            
+
             old_av = qkdm_availability[qkdm_id] if qkdm_id in qkdm_availability else new_av    
             qkdm_availability[qkdm_id] = new_av 
             cost = routeCost(old_av, new_av, stream['max_key_count'])
-
-            graph.update_link(config['qks']['id'], stream['qks_dest']['id'], cost)
+            graph.update_link(config['qks']['id'], stream['dest_qks']['id'], cost)
 
     return
 
@@ -69,7 +67,6 @@ async def receiveSocket(reader : asyncio.StreamReader, writer : asyncio.StreamWr
     writer.close()
     await writer.wait_closed()
 
-    #print(f"RECEIVE SOCKET: received a packet {packet.type} from {packet.srcID}")
     if packet.type == 'S' or packet.type == 'K': 
 
         if packet.srcID != config['qks']['id']:
@@ -82,8 +79,10 @@ async def receiveSocket(reader : asyncio.StreamReader, writer : asyncio.StreamWr
                     
                 graph.add_node(packet.srcID) 
 
-            await forwardSocket(packet, writer.get_extra_info('peername'))
-            await updateGraph(packet.srcID, packet.ids, packet.costs, packet.time, ptype = packet.type) 
+            await forwardSocket(packet, writer.get_extra_info('peername')[0])
+            up = await updateGraph(packet.srcID, packet.ids, packet.costs, packet.time, ptype = packet.type) 
+            if up: 
+                await updateRouting('force')
 
     else : 
         print("ERROR: Error in decoding or unknown packet type")
@@ -94,8 +93,9 @@ async def sendSocket (me : str, ptype : str , ptime : float) :
     for ks in list(ksAddresses.keys()):
         addr = ksAddresses[ks] 
         if ks in neighbors:
+            
             reader, writer = await asyncio.open_connection(addr['ip'], addr['port'])
-            print(f"        SEND SOCKET: sending to {ks} a packet of type {ptype}")
+            
             if ptype == 'S': 
                 ids = graph.get_node(me).get_saes()
                 costs = [0] * len(ids)
@@ -104,7 +104,7 @@ async def sendSocket (me : str, ptype : str , ptime : float) :
                 ids = list(neighbors)
                 costs = list(d.values())
                 packet = lsaPacket(version = 1, nAdj = len(ids), ptype = 'K', srcID = me, srcIP = config['qks']['ip'], srcPort = config['qks']['port'], routingPort=config['routing']['port'], routingIP=config['routing']['ip'], time = ptime, ids = ids, costs = costs)
-            
+   
             p_enc = packet.encode()
             if (p_enc is not None):
                 writer.write(p_enc)
@@ -112,26 +112,23 @@ async def sendSocket (me : str, ptype : str , ptime : float) :
             await writer.wait_closed()
 
 async def forwardSocket(packet : lsaPacket, ip : str) : 
-    global config 
+
+    global config , ksAddresses
     res = True if (packet.srcID != config['qks']['id'] and ksTimestamps[packet.srcID][packet.type] < packet.time) else False 
     if res: 
         for ks in list(ksAddresses.keys()) :
             addr = ksAddresses[ks]
-            if ks in graph.get_node(config['qks']['id']).get_neighbors().keys() and packet.srcID != ks:
-                #print(f"    FORWARD SOCKET: forwarding a packet of type {packet.type} to {ks}")
+            if ks in graph.get_node(config['qks']['id']).get_neighbors().keys() and ip != addr['ip']:
                 reader, writer = await asyncio.open_connection(addr['ip'], addr['port'])
                 writer.write(packet.encode())                  
-                writer.close()
-                await writer.wait_closed() 
+                writer.close() 
 
 
 async def updateRouting(mode : str = 'standard') -> bool : 
     removed = False 
-    global redis_client
-
+    global redis_client, graph
     threshold = time.time() - float(2*config['routing']['timer']) 
     removed = expireRoutes(threshold)
-    
     await updateLinkCosts()
 
     if mode == 'force' or removed : 
@@ -139,8 +136,8 @@ async def updateRouting(mode : str = 'standard') -> bool :
         old_rts = [x for x in (await redis_client.keys())] #read from redis 
         async with redis_client.pipeline() as pipe: 
             for rt, value in rts.items() :
-                for k, el in value.items(): 
-                    pipe.hset(name=rt, key = k, value = el)
+                pipe.hset(name=rt, mapping=value)
+                    
             
             for ort in old_rts: 
                 if ort not in rts: 
@@ -203,6 +200,7 @@ async def updateGraph(src : str, ids : list, costs : float, timestamp : float, p
                     graph.add_node(ks)
                     graph.add_link(src, ks, costs[i])
                     mongo_requests.append(UpdateOne({"_id" : src}, {"$addToSet" : {"neighbor_qks" : ks}}))
+                    mongo_requests.append(UpdateOne({"_id" : ks}, {"$addToSet" : {"neighbor_qks" : src}}))
                 elif timestamp > ksTimestamps[ks]['K']: 
                     graph.add_link(src, ks, costs[i])
                     
@@ -216,6 +214,7 @@ async def updateGraph(src : str, ids : list, costs : float, timestamp : float, p
                     up = True
                     graph.remove_link(src, ks)    
                     mongo_requests.append(UpdateOne({"_id" : src}, {"$pull" : {"neighbor_qks" : ks}}))
+                    mongo_requests.append(UpdateOne({"_id" : ks}, {"$pull" : {"neighbor_qks" : src}}))
 
     if mongo_requests != [] : 
         await qks_collection.bulk_write(mongo_requests) 
@@ -223,23 +222,24 @@ async def updateGraph(src : str, ids : list, costs : float, timestamp : float, p
     return up
 
 async def lsaUpdate() : 
-    global config , graph
+    global config , graph, redis_client
     timer = config['routing']['timer']
     me = config['qks']['id']
     n = 0
     print(f"Started task for periodic update every {timer} s")
     while True: 
-        n += 1
         await asyncio.sleep(timer)
         if (n % 10 == 0): 
             print(f"LSA UPDATE : sending periodic update {n}")
-            graph.print_nodes
-        if n == 1: 
+            graph.print_nodes()
+            print(f"Redis keys: {await redis_client.keys()}")
+        if n == 0: 
             await updateRouting('force')
         else: 
             await updateRouting()
         await sendSocket(me, 'K', time.time())
         await sendSocket(me, 'S', time.time())
+        n += 1
         
 
 async def listenForChanges() : 
@@ -250,7 +250,7 @@ async def listenForChanges() :
     await pubsub.psubscribe(f"{config['redis']['topic']}-**")
 
     while True:
-        message = await pubsub.get_message(ignore_subscribe_messages=True)
+        message = await pubsub.get_message(ignore_subscribe_messages=True, timeout = 0.1)
         if message is not None:
             print(f"LISTEN FOR CHANGES: Subscribe message received from {message['channel']} => {message['data']}")
             action, name = message['data'].split("-")
@@ -291,7 +291,7 @@ async def initData() -> bool :
     if not (await redis_client.ping()): 
         return False
 
-    await redis_client.flushdb(config['redis']['db'])
+    await redis_client.flushdb()
 
     try: 
         mongo_client = MongoClient(f"mongodb://{config['mongo_db']['user']}:{config['mongo_db']['password']}@{config['mongo_db']['host']}:{config['mongo_db']['port']}/{config['mongo_db']['db']}?authSource={config['mongo_db']['auth_src']}")
@@ -350,10 +350,9 @@ async def main() :
 
 
     # running LSA thread
-
     lsaUpdateTask = asyncio.create_task(lsaUpdate())
     listenForChangesTask = asyncio.create_task(listenForChanges())
-
+    
     server = await asyncio.start_server(receiveSocket, '0.0.0.0', int(config['routing']['port']))
     async with server:
         await server.serve_forever()
