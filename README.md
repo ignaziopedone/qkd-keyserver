@@ -33,7 +33,8 @@ simple file with some http requests for testing purposes
     * [x] dinamic cost for routes -> routing talks to qkd modules
     * [x] indirect stream support 
 * [ ] reserve key relaxed version (return reserved key list even if some are not reservable, not only a bool)
-* [ ] managin secrets with Dockert and not in clear in config files 
+* [ ] managin secrets with Docker and not in clear in config files 
 * [ ] implementing loggin with support to hypercorn (for multiprocessing) 
 * [x] moving to asyncio and Quart, Hypercorn and Motor (replacing Flask, Gunicorn and PyMongo) to improve performances
+* [ ] implement better timeout managment for http requests
 

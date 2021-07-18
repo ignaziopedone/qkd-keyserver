@@ -9,8 +9,6 @@ class VaultClient() :
         self.client.token = token
         self.keys = keys
         
-    def __del__ (self): 
-        self.client.close() 
 
     async def initialize(self, shares:int, threshold:int) -> bool: 
         if not (await self.client.is_initialized()):

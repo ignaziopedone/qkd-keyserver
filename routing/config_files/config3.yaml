@@ -11,7 +11,7 @@ qks:
   port: 4001
 routing: 
   timer : 20
-  port : 7001
+  port : 7000
   ip: 172.18.0.163
 redis: 
   user: root

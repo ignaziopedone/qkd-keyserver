@@ -45,8 +45,9 @@ async def getKey(slave_SAE_ID):
             return value, 200
         else: 
             return value, 503
-    except Exception:
+    except Exception as e:
         value = {'message' : "bad request: request does not contains a valid json object"}
+        print("getKey exception:  ", e)
         return value, 400 
 
 @app.route(prefix+"/keys/<master_SAE_ID>/dec_keys", methods=['POST'])
@@ -62,7 +63,8 @@ async def getKeyWithKeyIDs(master_SAE_ID):
             return value, 200
         else: 
             return value, 503
-    except Exception:
+    except Exception as e:
+        print("getKeyWithKeyIDs exception:  ", e)
         value = {'message' : "bad request: request does not contains a valid json object"}
         return value, 400 
 
@@ -231,7 +233,8 @@ async def reserveKeys(master_SAE_ID):
             return value, 200
         else: 
             return value, 503
-    except Exception: 
+    except Exception as e: 
+        print("reserveKeys exception:  ", e)
         value = {'message' : "error: invalid content"}
         return value, 400
 

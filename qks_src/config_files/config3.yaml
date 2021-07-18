@@ -18,12 +18,12 @@ qks:
 vault: 
   host : 172.18.0.20
   port : 8200
-  token : s.G8b0bLPI35KA8yhBWCAfNgA5
-  key64 : ZNUv2gMf1sNz0QdnB6+z+buP2sYz53VcYsuax9rl9es=
+  token : s.Zh9sFpgtXJeMeXlPz47dZX0k
+  key64 : HJUxGf7qFQCuFOO6eytZ3yU03LhixE0ThmXNzp1Bgio=
 redis: 
   user: root
   password: password 
-  topic: register2 
+  topic: register3 
   host: 172.18.0.30
   port: 6379
   db : 3
