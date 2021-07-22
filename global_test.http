@@ -1,0 +1,228 @@
+# global test with 3 QKS + routing and 4 QKDM, everything started empty 
+## linux wsl2 ip: 172.23.8.98
+
+
+# 1. register qks2 to qks1 and qks3 and vice versa
+## 1.1 : register qks2 to qks1 -> qks1 mapped with 4001 
+POST http://172.23.8.98:4001/api/v1/qks HTTP/1.1 
+Content-Type: application/json
+
+{
+    "QKS_ID" : "qks2",
+    "QKS_IP" : "172.18.0.182" ,
+    "QKS_port" : 4000 ,
+    "routing_IP" : "172.18.0.162" ,
+    "routing_port" : 7000 
+}
+
+
+###
+## 1.2 : register qks2 to qks3 -> qks3 mapped with 4003
+POST http://172.23.8.98:4003/api/v1/qks HTTP/1.1 
+Content-Type: application/json
+
+{
+    "QKS_ID" : "qks2",
+    "QKS_IP" : "172.18.0.182" ,
+    "QKS_port" : 4000 ,
+    "routing_IP" : "172.18.0.162" ,
+    "routing_port" : 7000  
+}
+
+###
+## 1.3 : register qks3 to qks2 -> qks2 mapped with 4002
+POST http://172.23.8.98:4002/api/v1/qks HTTP/1.1 
+Content-Type: application/json
+
+{
+    "QKS_ID" : "qks3",
+    "QKS_IP" : "172.18.0.183" ,
+    "QKS_port" : 4000 ,
+    "routing_IP" : "172.18.0.163" ,
+    "routing_port" : 7000  
+}
+
+
+###
+## 1.4 : register qks1 to qks2 -> qks2 mapped with 4002
+POST http://172.23.8.98:4002/api/v1/qks HTTP/1.1 
+Content-Type: application/json
+
+{
+    "QKS_ID" : "qks1",
+    "QKS_IP" : "172.18.0.181" ,
+    "QKS_port" : 4000 ,
+    "routing_IP" : "172.18.0.161" ,
+    "routing_port" : 7000  
+}
+
+
+###
+
+
+# 2. register 2 SAEs to each qks
+## 2.1 : register sae10 to qks1 
+POST http://172.23.8.98:4001/api/v1/saes HTTP/1.1
+Content-Type: application/json
+
+{ "id" : "sae10" }
+
+
+###
+## 2.2 : register sae20 to qks2
+POST http://172.23.8.98:4002/api/v1/saes HTTP/1.1
+Content-Type: application/json
+
+{ "id" : "sae20" }
+
+
+###
+## 2.3 : register sae21 to qks2
+POST http://172.23.8.98:4002/api/v1/saes HTTP/1.1
+Content-Type: application/json
+
+{ "id" : "sae21" }
+
+
+###
+## 2.4 : register sae30 to qks3
+POST http://172.23.8.98:4003/api/v1/saes HTTP/1.1
+Content-Type: application/json
+
+{ "id" : "sae30" }
+
+
+###
+## 2.5 : register sae31 to qks3
+POST http://172.23.8.98:4003/api/v1/saes HTTP/1.1
+Content-Type: application/json
+
+{ "id" : "sae31" }
+
+###
+## 2.1 : register sae12 to qks1 
+POST http://172.23.8.98:4001/api/v1/saes HTTP/1.1
+Content-Type: application/json
+
+{ "id" : "sae12" }
+
+
+
+
+###
+
+# 3. register qkdm1 to qks1, qkdm2a and qkdm2b to qks2, qkdm3 to qks3
+## 3.1 : register qkdm1 to qks1 -> qkdm1 mapped with 5001
+POST http://172.23.8.98:5001/api/v1/qkdm/actions/attach HTTP/1.1
+content-type: application/json
+
+{
+    "qks_src_IP" : "172.18.0.181",
+    "qks_src_port" : 4000,
+    "qks_src_ID" : "qks1",
+    "qks_dest_ID" : "qks2"
+}
+
+###
+## 3.2 : register qkdm3 to qks3 -> qkdm3 mapped with 5003
+POST http://172.23.8.98:5003/api/v1/qkdm/actions/attach HTTP/1.1
+content-type: application/json
+
+{
+    "qks_src_IP" : "172.18.0.183",
+    "qks_src_port" : 4000,
+    "qks_src_ID" : "qks3",
+    "qks_dest_ID" : "qks2"
+}
+
+###
+## 3.3 : register qkdm2a to qks2 -> qkdm2a mapped with 5002
+POST http://172.23.8.98:5002/api/v1/qkdm/actions/attach HTTP/1.1
+content-type: application/json
+
+{
+    "qks_src_IP" : "172.18.0.182",
+    "qks_src_port" : 4000,
+    "qks_src_ID" : "qks2",
+    "qks_dest_ID" : "qks1"
+}
+
+###
+## 3.4 : register qkdm2b to qks2 -> qkdm2b mapped with 5000
+POST http://172.23.8.98:5000/api/v1/qkdm/actions/attach HTTP/1.1
+content-type: application/json
+
+{
+    "qks_src_IP" : "172.18.0.182",
+    "qks_src_port" : 4000,
+    "qks_src_ID" : "qks2",
+    "qks_dest_ID" : "qks3"
+}
+
+###
+
+# 4. start streams for qkdm1-qkdm2a and qkdm2b-qkdm3 
+## 4.1 : start stream qkdm1-qkdm2a posting request to qks1 
+POST http://172.23.8.98:4001/api/v1/qkdms/qkdm1/streams HTTP/1.1
+
+###
+## 4.2 : start stream qkdm2b-qkdm3 posting request to qks3 
+POST http://172.23.8.98:4003/api/v1/qkdms/qkdm3/streams HTTP/1.1
+
+
+###
+# 5. test getKey and getKeyWithKeyID between qks1 and qks2  
+## 5.1 : getStatus to qks1 from sae10 to sae20
+GET http://172.23.8.98:4001/api/v1/keys/sae20/status?master_SAE_ID=sae10 HTTP/1.1
+
+###
+## 5.2 : sae10 call getKey to qks1 with slave_sae = sae20 
+POST http://172.23.8.98:4001/api/v1/keys/sae20/enc_keys HTTP/1.1
+content-type: application/json
+
+{
+    "master_SAE_ID" : "sae10",
+    "size" : 128, 
+    "number" : 2
+}
+
+### 
+## 5.3 : sae20 call getKeyWithKeyIDs to qks2 with keyIDs got in 5.2
+POST http://172.23.8.98:4002/api/v1/keys/sae10/dec_keys HTTP/1.1
+content-type: application/json
+
+{
+    "slave_SAE_ID" : "sae20",
+    "key_IDs" : ["15047087-a4ca-4baa-aa8c-fb79130083ea", "3d441626-2130-4d9a-ab50-6ca74ad9eccb"]
+}
+
+###
+# 6. create an indirect stream between qks1 and qks3 
+# 6.1 : call getStatus from sae10 to qks1 for sae30 
+GET http://172.23.8.98:4001/api/v1/keys/sae30/status?master_SAE_ID=sae10 HTTP/1.1
+
+###
+# 7. test getKey over indirect stream 
+## 7.1 : sae10 call getKey to qks1 with slave_sae = sae30 
+POST http://172.23.8.98:4001/api/v1/keys/sae30/enc_keys HTTP/1.1
+content-type: application/json
+
+{
+    "master_SAE_ID" : "sae10",
+    "size" : 128, 
+    "number" : 2
+}
+
+###
+## 7.2 : sae30 call getKey to qks3 with master_sae = sae10 with keys got in 7.1
+POST http://172.23.8.98:4003/api/v1/keys/sae10/dec_keys HTTP/1.1
+content-type: application/json
+
+{
+    "slave_SAE_ID" : "sae30",
+    "key_IDs" : ["3bd7073b-20cd-4a2a-906d-bffe3c5fd562", "87496921-9226-4e84-9d65-0c13e87a7d67"]
+}
+
+### 
+# 8. close indirect stream qks1-qks3 
+DELETE http://172.23.8.98:4001/api/v1/qks/qks3/streams?force=1 HTTP/1.1
