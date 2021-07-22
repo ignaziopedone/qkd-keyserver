@@ -240,8 +240,8 @@ async def lsaUpdate() :
         await sendSocket(me, 'K', time.time())
         await sendSocket(me, 'S', time.time())
         n += 1
-        
 
+        
 async def listenForChanges() : 
     print("Started task subscribed to redis topic")
     global redis_client, config, graph, cost_param
@@ -315,6 +315,7 @@ async def initData() -> bool :
         init_data = {"connected_sae" : [], "neighbor_qks" : []}
         address_data = {"$set" : {"address" : {"ip" : config['qks']['ip'], "port" : config['qks']['port']}, "routing_address" : {"ip" : config['routing']['ip'], "port" : config['routing']['port']}}, "$setOnInsert" : init_data}
         qks_collection.update_one({"_id" : config['qks']['id']}, address_data, upsert=True )
+        graph.add_node(config['qks']['id'])
 
     except Exception: 
         return False 
