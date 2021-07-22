@@ -8,7 +8,7 @@ mongo_db:
 qks:
   id: qks3
   ip: 172.18.0.183
-  port: 4001
+  port: 4000
 routing: 
   timer : 20
   port : 7000
