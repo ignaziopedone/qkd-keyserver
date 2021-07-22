@@ -19,9 +19,9 @@ class VaultClient() :
         return True
 
     async def unseal(self, keys:list = None) -> bool: 
-        if keys is None: 
+        if not keys: 
             keys = self.keys
-        if (await self.client.is_sealed()) and keys is not None :
+        if (await self.client.is_sealed()) and keys :
             await self.client.unseal_multi(keys)
         return not (await self.client.is_sealed()) 
     
@@ -109,7 +109,7 @@ class VaultClient() :
             for path in paths: 
                 if path not in data['data']['keys']: 
                     return False 
-            return False 
+            return True 
 
         except Exception: 
             return False 
