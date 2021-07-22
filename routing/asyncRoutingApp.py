@@ -162,7 +162,6 @@ def expireRoutes(threshold : float) -> bool :
             for neighbor in graph.get_node(ks).get_neighbors().keys():
                 if neighbor != config['qks']['id'] and ksTimestamps[neighbor]['K'] < threshold: 
                     graph.remove_link(ks, neighbor) 
-                    print(f"REMOVED LINK: {ks} - {neighbor}")
                     removed = True
     return removed
 
@@ -259,7 +258,6 @@ async def listenForChanges() :
                     res = True if graph.add_sae(name, config['qks']['id']) is not None else False
                 elif action == "remove": 
                     res = graph.remove_sae(name)
-                print(f" CHANGES : sae {res}")
                 if res:     
                     await updateRouting('force')
                     await sendSocket(config['qks']['id'], 'S', time.time())
@@ -270,7 +268,6 @@ async def listenForChanges() :
                     res = graph.add_link(name, config['qks']['id'], cost_param['c0'])
                 elif action == "remove": 
                     res = graph.remove_link(name, config['qks']['id']) 
-                print(f" CHANGES : link {res}")
                 if res: 
                     await updateRouting('force')
                     await sendSocket(config['qks']['id'], 'S', time.time())
@@ -281,7 +278,6 @@ async def listenForChanges() :
                     ksAddresses[id] = {'ip' : ip, 'port' : port}
                     ksTimestamps[id] = { 'K' : 0.0, 'S' : 0.0}
                     graph.add_node(id)
-                    print("new qks node added", graph.get_node(id))
                     
 
 async def initData() -> bool :
@@ -293,37 +289,30 @@ async def initData() -> bool :
 
     await redis_client.flushdb()
 
-    try: 
-        mongo_client = MongoClient(f"mongodb://{config['mongo_db']['user']}:{config['mongo_db']['password']}@{config['mongo_db']['host']}:{config['mongo_db']['port']}/{config['mongo_db']['db']}?authSource={config['mongo_db']['auth_src']}")
-        qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers'] 
+    mongo_client = MongoClient(f"mongodb://{config['mongo_db']['user']}:{config['mongo_db']['password']}@{config['mongo_db']['host']}:{config['mongo_db']['port']}/{config['mongo_db']['db']}?authSource={config['mongo_db']['auth_src']}")
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers'] 
 
-        qks_cursor = qks_collection.find()
-        
-        async for qks in qks_cursor:  
-            if qks['_id'] != config['qks']['id']: 
-                ksAddresses[qks['_id']] = qks['routing_address']
-                ksTimestamps[qks['_id']] = { 'K' : 0.0, 'S' : 0.0}
-            graph.add_node(qks['_id'])
-            if 'connected_sae' in qks: 
-                for sae in qks['connected_sae']: 
-                    graph.add_sae(sae, qks['_id'])
-            if 'neighbor_qks' in qks: 
-                for n in qks['neighbor_qks']: 
-                    graph.add_node(n)
-                    graph.add_link(n, qks['_id'], cost_param['c0'])
+    qks_cursor = qks_collection.find()
+    
+    async for qks in qks_cursor:  
+        if qks['_id'] != config['qks']['id']: 
+            ksAddresses[qks['_id']] = qks['routing_address']
+            ksTimestamps[qks['_id']] = { 'K' : 0.0, 'S' : 0.0}
+        graph.add_node(qks['_id'])
+        if 'connected_sae' in qks: 
+            for sae in qks['connected_sae']: 
+                graph.add_sae(sae, qks['_id'])
+        if 'neighbor_qks' in qks: 
+            for n in qks['neighbor_qks']: 
+                graph.add_node(n)
+                graph.add_link(n, qks['_id'], cost_param['c0'])
 
-        init_data = {"connected_sae" : [], "neighbor_qks" : []}
-        address_data = {"$set" : {"address" : {"ip" : config['qks']['ip'], "port" : config['qks']['port']}, "routing_address" : {"ip" : config['routing']['ip'], "port" : config['routing']['port']}}, "$setOnInsert" : init_data}
-        qks_collection.update_one({"_id" : config['qks']['id']}, address_data, upsert=True )
-        graph.add_node(config['qks']['id'])
-
-    except Exception: 
-        return False 
+    init_data = {"connected_sae" : [], "neighbor_qks" : []}
+    address_data = {"$set" : {"address" : {"ip" : config['qks']['ip'], "port" : config['qks']['port']}, "routing_address" : {"ip" : config['routing']['ip'], "port" : config['routing']['port']}}, "$setOnInsert" : init_data}
+    qks_collection.update_one({"_id" : config['qks']['id']}, address_data, upsert=True )
+    graph.add_node(config['qks']['id'])
 
     http_client = aiohttp.ClientSession()
-
-    print(f"INIT GRAPH: {graph}")
-    graph.print_nodes()
 
     return True 
 
