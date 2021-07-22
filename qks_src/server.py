@@ -274,8 +274,9 @@ async def createStream():
             return value, 200
         else: 
             return value, 503
-    except Exception:
+    except Exception as e:
         value = {'message' : "error: invalid content"}
+        print(e)
         return value, 400
         
 @app.route(prefix+"/streams/<key_stream_ID>", methods=['DELETE'])
