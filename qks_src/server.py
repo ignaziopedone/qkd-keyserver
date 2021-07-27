@@ -47,7 +47,6 @@ async def getKey(slave_SAE_ID):
             return value, 503
     except Exception as e:
         value = {'message' : "bad request: request does not contains a valid json object"}
-        print("getKey exception:  ", e)
         return value, 400 
 
 @app.route(prefix+"/keys/<master_SAE_ID>/dec_keys", methods=['POST'])
@@ -64,7 +63,6 @@ async def getKeyWithKeyIDs(master_SAE_ID):
         else: 
             return value, 503
     except Exception as e:
-        print("getKeyWithKeyIDs exception:  ", e)
         value = {'message' : "bad request: request does not contains a valid json object"}
         return value, 400 
 
@@ -172,14 +170,14 @@ async def registerQKS():
 async def deleteIndirectStream(qks_ID) : 
     try: 
         qks_ID = str(qks_ID)
-        param = int(request.args.get('force'))
+        param = int(request.args.get('force', 0, int))
         force_mode = True if param == 1 else False 
         status, value = await api.deleteIndirectStream(qks_ID, force_mode)
         if status: 
             return value, 200
         else: 
             return value, 503
-    except Exception:
+    except Exception as e:
         value = {'message' : "error: invalid content"}
         return value, 400
 
@@ -234,7 +232,6 @@ async def reserveKeys(master_SAE_ID):
         else: 
             return value, 503
     except Exception as e: 
-        print("reserveKeys exception:  ", e)
         value = {'message' : "error: invalid content"}
         return value, 400
 
@@ -244,7 +241,7 @@ async def forwardData():
     try:
         data = str(content['data'])
         decryption_key_ID = content['decryption_key_ID']
-        decryption_stream_ID = str(content['decryption_key_stream'])
+        decryption_stream_ID = str(content['decryption_stream_ID'])
         iv = str(content['iv'])
         destination_sae = str(content['destination_sae']) 
         
@@ -254,7 +251,7 @@ async def forwardData():
             return value, 200 
         else: 
             return value, 503 
-    except: 
+    except Exception as e: 
         value = {'message' : "error: invalid content"}
         return value, 400
 
@@ -266,7 +263,7 @@ async def createStream():
         key_stream_ID = str(content['key_stream_ID'])
         stream_type = str(content['type'])
         qkdm_id = str(content['qkdm_id']) if 'qkdm_id' in content else None
-        master_key_id = str(content['master_key_id']) if 'master_key_id' in content else None
+        master_key_id = str(content['master_key_ID']) if 'master_key_ID' in content else None
         destination_sae = str(content['destination_sae']) if 'destination_sae' in content else None
 
         status, value = await api.createStream(source_qks_ID, key_stream_ID, stream_type, qkdm_id, master_key_id, destination_sae)
@@ -276,7 +273,6 @@ async def createStream():
             return value, 503
     except Exception as e:
         value = {'message' : "error: invalid content"}
-        print(e)
         return value, 400
         
 @app.route(prefix+"/streams/<key_stream_ID>", methods=['DELETE'])
@@ -295,7 +291,7 @@ async def closeStream(key_stream_ID):
         value = {'message' : "error: invalid content"}
         return value, 400
 
-@app.route(prefix+"streams/<key_stream_ID>/exchange", methods=['POST'])
+@app.route(prefix+"/streams/<key_stream_ID>/exchange", methods=['POST'])
 async def exchangeIndirectKey(key_stream_ID) : 
     key_stream_ID = str(key_stream_ID)
     content = await request.get_json() 
@@ -310,7 +306,7 @@ async def exchangeIndirectKey(key_stream_ID) :
         else: 
             return value, 503
 
-    except Exception: 
+    except Exception as e: 
         value = {'message' : "error: invalid content"}
         return value, 400
 
