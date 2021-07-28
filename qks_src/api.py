@@ -6,6 +6,7 @@ from base64 import b64decode, b64encode
 from Crypto.Cipher import AES  
 from Crypto.Random import get_random_bytes
 from Crypto.Util.Padding import pad, unpad
+import asyncio
 
 from asyncVaultClient import VaultClient # from VaultClient import VaultClient 
 import aiohttp #import requests
@@ -266,14 +267,19 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
             chunks = ret_val['keys']
 
         else: # indirect stream 
+            tasks = [] 
             chunks = [] 
             for kid in kids: 
-                c = await vault_client.readAndRemove(f"{config['qks']['id']}/{key_stream['_id']}", kid)
-                chunks.append(c[kid])
-                
+                tasks.append(asyncio.create_task(vault_client.readAndRemove(f"{config['qks']['id']}/{key_stream['_id']}", kid)))
+                #c = await vault_client.readAndRemove(f"{config['qks']['id']}/{key_stream['_id']}", kid)
+                #chunks.append(c[kid])
+
+            ret = await asyncio.gather(*tasks)
+            for c, kid in zip(ret,kids): 
                 if c is None: 
                     status = {"message" : "ABORT : THIS SHOULD NOT HAPPEN! there is someone else which is not this QKS that is accessing vault!"}
-                    return (False, status) 
+                    return (False, status)
+                chunks.append(c[kid]) 
 
 
         byte_key = b''
@@ -330,13 +336,20 @@ async def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str) -
                 
                 else: 
                     returned_keys = []
-                    for kid in key['kids']:
-                        ret_key = await vault_client.readAndRemove(f"{config['qks']['id']}/{key_stream['_id']}", kid)     
-                    if ret_key is not None: 
-                        ret_status, ret_status_code = 0, 200
-                        returned_keys.append(ret_key[kid])
-                    else:  
-                        ret_status, ret_status_code = 1, 503
+                    tasks = [] 
+                    for kid in key['kids']: 
+                        tasks.append(asyncio.create_task(vault_client.readAndRemove(f"{config['qks']['id']}/{key_stream['_id']}", kid)))
+                        
+                    rets = await asyncio.gather(*tasks)
+                        #ret_key = await vault_client.readAndRemove(f"{config['qks']['id']}/{key_stream['_id']}", kid)     
+                    
+                    for ret, kid in zip(rets, key['kids']): 
+                        if ret is not None: 
+                            ret_status, ret_status_code = 0, 200
+                            returned_keys.append(ret[kid])
+                        else:  
+                            ret_status, ret_status_code = 1, 503
+                            break 
 
                 if ret_status == 0 and ret_status_code == 200: 
                     # if a key is not available in the module or in vault it won't be returned but the other keys will be returned correctly
@@ -1091,13 +1104,16 @@ async def exchangeIndirectKey(key_stream_ID : str, iv_b64 : str, number : int , 
     master_key = b64decode(master_key_data[key_stream['indirect_data']['master_key_id']])
     decypher = AES.new(master_key, AES.MODE_GCM, iv) 
 
+    tasks = [] 
     for enc_key_b64, id in zip(enc_keys_b64, ids): 
         enc_key = b64decode(enc_key_b64)
         key = unpad(decypher.decrypt(enc_key), AES.block_size)
         key_b64 = b64encode(key).decode() 
         data = {id : key_b64}
-        res = await  vault_client.writeOrUpdate(f"{config['qks']['id']}/{key_stream['_id']}", id, data)  
+        tasks.append(asyncio.create_task(vault_client.writeOrUpdate(f"{config['qks']['id']}/{key_stream['_id']}", id, data)  ))
+        #res = await  vault_client.writeOrUpdate(f"{config['qks']['id']}/{key_stream['_id']}", id, data)  
 
+    res = await asyncio.gather(*tasks)
     await stream_collection.update_one({"_id" : key_stream_ID}, {"$inc" : {"indirect_data.available_keys" : number}})
     status = {"message" : "keys saved successfully"}
     return True, status 
