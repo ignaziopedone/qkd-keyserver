@@ -1,0 +1,139 @@
+
+
+# NORTHBOUND INTERFACE 
+
+## getStatus
+GET http://172.23.137.22:4001/api/v1/keys/sae10/status?master_SAE_ID=sae21 HTTP/1.1
+content-type: application/json
+
+
+### 
+## registerQKS 
+POST http://172.23.137.22:4001/api/v1/qks HTTP/1.1 
+Content-Type: application/json
+
+{
+    "QKS_ID" : "qks1",
+    "QKS_IP" : "localhost" ,
+    "QKS_port" : 4000 ,
+    "routing_IP" : "localhost" ,
+    "routing_port" : 7000
+}
+
+### 
+## getKey
+POST http://172.31.216.121:4000/api/v1/keys/SAE22/enc_keys HTTP/1.1
+content-type: application/json
+
+{
+    "master_SAE_ID" : "SAE11",
+    "size" : 128, 
+    "number" : 4
+}
+
+### 
+## getKeyWithKeyIDs
+POST http://172.31.216.121:4001/api/v1/keys/SAE11/dec_keys HTTP/1.1
+content-type: application/json
+
+{
+    "key_IDs" : ["dbc0f3d5-d561-47ad-bd7c-3bebafabcab6", "83b0eaa2-aa63-4d5b-8dd4-36ce40af83cf", "ed333391-3518-4a0a-b2ae-df8fb045dedf"]
+}
+
+###
+## getQKDMs
+GET http://172.31.216.121:4000/api/v1/qkdms HTTP/1.1
+
+###
+## registerSAE
+POST http://172.23.137.22:4001/api/v1/saes HTTP/1.1
+Content-Type: application/json
+
+{
+    "id" : "sae21"
+}
+
+### 
+# unregisterSAE
+DELETE http://172.23.137.22:4000/api/v1/saes/sae123456 HTTP/1.1
+
+
+###
+GET http://172.31.216.121:4000/api/v1/preferences HTTP/1.1
+
+###
+PUT http://172.31.216.121:4000/api/v1/preferences/pref1 HTTP/1.1
+Content-Type: application/json
+
+{
+    "preference" : "pref1",
+    "value" : "pippo2"
+}
+
+###
+## startQKDMStream
+POST http://172.31.216.121:4000/api/v1/qkdms/qkdm1/streams HTTP/1.1
+
+###
+## deleteQKDMStream
+DELETE http://172.31.216.121:4000/api/v1/qkdms/qkdm1/streams HTTP/1.1
+
+###
+## registerQKDM
+POST http://172.20.161.67:4000/api/v1/qkdms HTTP/1.1
+Content-Type: application/json
+
+{
+    "QKDM_ID" : "id1222",
+    "protocol" : "fake", 
+    "QKDM_IP" : "0.0.0.0", 
+    "QKDM_port" : 5000, 
+    "reachable_QKS" : "qks2", 
+    "reachable_QKDM" : "qkdm2", 
+    "max_key_count" : 100, 
+    "key_size" : 128
+}
+
+###
+## reserveKeys
+POST http://172.31.216.121:4000/api/v1/keys/SAE22/reserve HTTP/1.1
+Content-Type: application/json
+
+{
+    "key_stream_ID" : "stream1", 
+    "slave_SAE_ID" : "SAE11", 
+    "key_lenght" : 256, 
+    "key_ID_list" : [{"AKID" : "akidnewnew3", "kids" : ["c1newnew", "c2newnew"]}, 
+    {"AKID" : "akidnewnew3", "kids" : ["c3newnew", "c4newnew"]}]
+}
+
+###
+POST http://172.31.216.121:8080/api/v1/forward HTTP/1.1
+Content-Type: application/json
+
+{
+    "data" : "blalblblbl",
+    "decryption_key_ID" : "id1",
+    "decryption_key_stream" : "stream1"
+}
+
+###
+## createStrean
+POST http://172.31.216.121:4000/api/v1/streams HTTP/1.1
+Content-Type: application/json
+
+{
+    "source_qks_ID" : "qks1",
+    "key_stream_ID" : "key_stream1", 
+    "type" : "direct",
+    "qkdm_address" : "localhost"
+}
+
+####
+DELETE http://172.31.216.121:4000/api/v1/streams/key_stream1 HTTP/1.1
+Content-Type: application/json
+
+{
+    "source_qks_ID" : "qks1"
+}
+
