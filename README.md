@@ -37,9 +37,11 @@ QKDM docs can be found in qkdm repository
     * [x] routing process and routing algorithm 
     * [x] indirect stream support 
 * [ ] reserve key relaxed version (return reserved key list even if some are not reservable, not only a bool)
-* [ ] managin secrets with Docker and not in clear in config files 
+* [ ] managing secrets with Docker and not in clear in config files 
 * [ ] implementing loggin with support to hypercorn (for multiprocessing) 
 * [x] moving to asyncio and Quart, Hypercorn and Motor (replacing Flask, Gunicorn and PyMongo) to improve performances
 * [ ] implement better timeout managment for http requests
 * [ ] dockerfile with volumes for config files 
+* [x] qkdm -> parallelize requests to Vault 
+* [x] qks -> parallelize get_key to qkdm 
 
