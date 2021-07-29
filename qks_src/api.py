@@ -227,8 +227,6 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
         if needed_keys == 0: 
             break 
 
-
-
     if len(list_to_be_sent) < 1 : 
         status =  {"message" : "ERROR: unable to reserve any key"} 
         return (False, status )
@@ -251,46 +249,14 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
             return (False, status)
 
     res = {'keys' : [], 'key_container_extension' : {'direct_communication' : direct_communication, 'returned_keys' : len(list_to_be_sent)}}
+    tasks = [] 
     for element in list_to_be_sent: 
-        AKID = element['AKID']
-        kids = element['kids']
-        if 'qkdm' in key_stream: 
-            address = key_stream['qkdm']['address']
-            post_data = {'key_stream_ID' : key_stream['_id'], 'indexes' : kids}
-            async with http_client.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/get_key", json=post_data) as ret: 
-                ret_val = await ret.json()
-                ret_status_code = ret.status
+        tasks.append(asyncio.create_task(requireSingleKey(key_stream, element, key_size)))
         
-            if ret_val['status'] != 0 or ret_status_code != 200: 
-                status = {"message" : "ABORT : THIS SHOULD NOT HAPPEN! there is someone else which is not this QKS that is using the QKDM!"}
-                return (False, status)
-            chunks = ret_val['keys']
-
-        else: # indirect stream 
-            tasks = [] 
-            chunks = [] 
-            for kid in kids: 
-                tasks.append(asyncio.create_task(vault_client.readAndRemove(f"{config['qks']['id']}/{key_stream['_id']}", kid)))
-                #c = await vault_client.readAndRemove(f"{config['qks']['id']}/{key_stream['_id']}", kid)
-                #chunks.append(c[kid])
-
-            ret = await asyncio.gather(*tasks)
-            for c, kid in zip(ret,kids): 
-                if c is None: 
-                    status = {"message" : "ABORT : THIS SHOULD NOT HAPPEN! there is someone else which is not this QKS that is accessing vault!"}
-                    return (False, status)
-                chunks.append(c[kid]) 
-
-
-        byte_key = b''
-        for el in chunks :
-            byte_key += b64decode(el.encode()) 
-        key = b64encode(byte_key[0:(key_size//8)]).decode()
-        res['keys'].append({'key_ID' : AKID, 'key' : key}) # key joined as bytearray, return as b64 string 
-        
+    res['keys'] = await asyncio.gather(*tasks)
     update_query = {"$pull" : {"reserved_keys" : {"AKID" : {"$in" : used_AKIDs}}}}
     if 'qkdm' not in key_stream: 
-        update_query["$inc"] = {"indirect_data.available_keys" : -len(chunks)}
+        update_query["$inc"] = {"indirect_data.available_keys" : -(chunks_for_each_key*len(res['keys']))}
     await key_stream_collection.update_one({"_id" : key_stream['_id']}, update_query)
     return (True, res)
         
@@ -320,47 +286,15 @@ async def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str) -
         status = {"message" : "none of your requester keys are available!"}
         return (False, status)
 
+    tasks = []
     keys_to_be_returned = { 'keys' : []}
     for key_stream in matching_streams:
         for key in key_stream['reserved_keys']:
             if key['AKID'] in key_IDs and key['sae'] == master_SAE_ID:
                 # for each requested AKID require all its chunks and build the aggregate key
-                if 'qkdm' in key_stream: 
-                    address = key_stream['qkdm']['address']
-                    post_data = {'key_stream_ID' : key_stream["_id"], 'indexes' : key['kids']}
-                    async with http_client.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/get_key", json=post_data) as ret:
-                        ret_val = await ret.json()
-                        ret_status = ret_val['status']
-                        returned_keys = ret_val['keys'] if ret_status == 0 else None 
-                        ret_status_code = ret.status
-                
-                else: 
-                    returned_keys = []
-                    tasks = [] 
-                    for kid in key['kids']: 
-                        tasks.append(asyncio.create_task(vault_client.readAndRemove(f"{config['qks']['id']}/{key_stream['_id']}", kid)))
-                        
-                    rets = await asyncio.gather(*tasks)
-                        #ret_key = await vault_client.readAndRemove(f"{config['qks']['id']}/{key_stream['_id']}", kid)     
-                    
-                    for ret, kid in zip(rets, key['kids']): 
-                        if ret is not None: 
-                            ret_status, ret_status_code = 0, 200
-                            returned_keys.append(ret[kid])
-                        else:  
-                            ret_status, ret_status_code = 1, 503
-                            break 
-
-                if ret_status == 0 and ret_status_code == 200: 
-                    # if a key is not available in the module or in vault it won't be returned but the other keys will be returned correctly
-                    byte_key = b''
-                    for el in returned_keys :
-                        byte_key += b64decode(el.encode()) 
-                    aggregate_key = b64encode(byte_key[0:(key['key_size']//8)]).decode()
-                    keys_to_be_returned['keys'].append({'key_ID' : key['AKID'], 'key' : aggregate_key})
-
-                    # remove akid from reserved keys
-                    await stream_collection.update_one({"_id" : key_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : key['AKID']}}})
+                tasks.append(asyncio.create_task(requireSingleKey(key_stream, key, key['key_size'], update=True)))
+    
+    keys_to_be_returned['keys'] = await asyncio.gather(*tasks)
     return (True, keys_to_be_returned)
 
 async def getQKDMs() -> tuple[bool, dict]: 
@@ -1111,7 +1045,7 @@ async def exchangeIndirectKey(key_stream_ID : str, iv_b64 : str, number : int , 
         key_b64 = b64encode(key).decode() 
         data = {id : key_b64}
         tasks.append(asyncio.create_task(vault_client.writeOrUpdate(f"{config['qks']['id']}/{key_stream['_id']}", id, data)  ))
-        #res = await  vault_client.writeOrUpdate(f"{config['qks']['id']}/{key_stream['_id']}", id, data)  
+ 
 
     res = await asyncio.gather(*tasks)
     await stream_collection.update_one({"_id" : key_stream_ID}, {"$inc" : {"indirect_data.available_keys" : number}})
@@ -1164,8 +1098,9 @@ async def init_server(config_file_name = "qks_src/config_files/config.yaml") -> 
     return (True, config['qks']['port'])
 
 async def sendIndirectKey(key_stream_obj : dict, number : int) -> tuple[bool, list] : 
-    global vault_client, http_client, config
-
+    global vault_client, http_client, config, mongo_client
+    stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
+    
     iv = get_random_bytes(AES.key_size[2])
     iv_b64 = b64encode(iv).decode()
     master_key_data = await vault_client.read(f"{config['qks']['id']}", key_stream_obj['indirect_data']['master_key_id'] )
@@ -1196,5 +1131,48 @@ async def sendIndirectKey(key_stream_obj : dict, number : int) -> tuple[bool, li
         data = {id : b64_key}
         res = await  vault_client.writeOrUpdate(f"{config['qks']['id']}/{key_stream_obj['_id']}", id, data)    
 
+    await stream_collection.update_one({"_id" : key_stream_obj['_id']}, {"$inc" : {"indirect_data.available_keys" : number}})
     return True, key_ids
 
+
+async def requireSingleKey(key_stream: dict, key: dict, key_size: int, update: bool = False ) -> dict:
+    stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
+    chunks = []
+    if 'qkdm' in key_stream: 
+        address = key_stream['qkdm']['address']
+        post_data = {'key_stream_ID' : key_stream["_id"], 'indexes' : key['kids']}
+        async with http_client.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/get_key", json=post_data) as ret:
+            ret_val = await ret.json()
+            ret_status_code = ret.status
+
+        if ret_val['status'] != 0 or ret_status_code != 200:
+            return None
+        chunks = ret_val['keys']
+
+    else: 
+        tasks = [] 
+        for kid in key['kids']: 
+            tasks.append(asyncio.create_task(vault_client.readAndRemove(f"{config['qks']['id']}/{key_stream['_id']}", kid)))
+        rets = await asyncio.gather(*tasks)
+        
+        for c, kid in zip(rets, key['kids']): 
+            if c is not None: 
+                chunks.append(c[kid])
+            else:  
+                return None  
+
+
+    # if a key is not available in the module or in vault it won't be returned but the other keys will be returned correctly
+    byte_key = b''
+    for el in chunks :
+        byte_key += b64decode(el.encode()) 
+    aggregate_key = b64encode(byte_key[0:(key_size//8)]).decode()
+
+    if update: # remove akid from reserved keys
+        update_query = {"$pull" : {"reserved_keys" : {"AKID" : key['AKID']}}}
+        if 'qkdm' not in key_stream: 
+            update_query["$inc"] = {"indirect_data.available_keys" : -len(chunks)}
+        await stream_collection.update_one({"_id" : key_stream['_id']}, update_query)
+
+    
+    return {'key_ID' : key['AKID'], 'key' : aggregate_key}
