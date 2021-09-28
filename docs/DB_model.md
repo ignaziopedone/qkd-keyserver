@@ -93,7 +93,13 @@
 
 
 @startjson
-#highlight "SAE ID" 
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
 "<color:red>**Routing Table **" : "", 
   	"SAE ID" : "String", 
@@ -105,5 +111,34 @@
 }
 @endjson
 
+@startjson
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
+{
+    "version" : "Integer", 
+    "type" : "String", 
+    "source" : {
+        "ID" : "String", 
+        "address" : "String",
+        "port" : "Integer"
+    }, 
+    "routing" : {
+        "address" : "String", 
+        "port" : "Integer"
+    }, 
+    "neighbors" : [
+        {
+            "ID" : "String",
+            "cost" : "Integer"
+        },
+		"..."
+    ],
+    "timestamp" : "String"
 
-
+}
+@endjson
