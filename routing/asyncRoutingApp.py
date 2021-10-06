@@ -1,5 +1,5 @@
 import qkdGraph
-from lsaPacket import lsaPacket
+from lsaPacket import lsaPacketv2
 
 from motor.motor_asyncio import AsyncIOMotorClient as MongoClient
 from pymongo import UpdateOne
@@ -55,39 +55,41 @@ async def updateLinkCosts():
 async def receiveSocket(reader : asyncio.StreamReader, writer : asyncio.StreamWriter): 
     global mongo_client, config
 
-    version = int.from_bytes(await reader.read(1), 'big')
-    nAdj = int.from_bytes(await reader.read(1), 'big')
-    packet = lsaPacket(version = version, nAdj = nAdj)
+    # size : 2 bytes
+    size = int.from_bytes(await reader.read(2), 'big') 
+    packet = lsaPacketv2()
 
-    read_size = nextPowerOf2(packet.get_dimension()-2) # 2 bytes already read
+    read_size = nextPowerOf2(size)
     raw_packet = await reader.read(read_size)
 
-    if len(raw_packet) == packet.get_dimension()-2 :
+    if len(raw_packet) == size :
         packet.decode(raw_packet)
     writer.close()
     await writer.wait_closed()
 
-    if packet.type == 'S' or packet.type == 'K': 
-
-        if packet.srcID != config['qks']['id']:
-            if (packet.srcID) not in ksAddresses.keys() : 
-                ksAddresses[packet.srcID] = {'ip' : packet.routingIP, 'port' : packet.routingPort}
-                ksTimestamps[packet.srcID] = {'S' : 0.0, 'K' : 0.0}   
+    if packet.data != None and (packet.data['type'] == 'S' or packet.data['type'] == 'K'): 
+        packet_srcID = packet.data['source']['ID']
+        packet_routing = packet.data['routing']
+        if packet_srcID != config['qks']['id']:
+            if (packet_srcID) not in ksAddresses.keys() : 
+                ksAddresses[packet_srcID] = {'ip' : packet_routing['address'], 'port' : packet_routing['port']}
+                ksTimestamps[packet_srcID] = {'S' : 0.0, 'K' : 0.0}   
                 qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers'] 
-                qks_data = {"_id" : packet.srcID, "connected_SAE" : [], "neighbor_qks" : [], "address" : {"ip" : packet.srcIP, "port" :  packet.srcPort}, "routing_address" : {"ip" : packet.routingIP, "port" :  packet.routingPort}}
+                qks_data = {"_id" : packet_srcID, "connected_SAE" : [], "neighbor_qks" : [], "address" : {"ip" : packet.data['source']['address'], "port" :  packet.data['source']['port']}, "routing_address" : {"ip" : packet_routing['address'], "port" :  packet_routing['port']}}
                 qks_collection.insert_one(qks_data)
                     
-                graph.add_node(packet.srcID) 
+                graph.add_node(packet_srcID) 
 
             await forwardSocket(packet, writer.get_extra_info('peername')[0])
-            up = await updateGraph(packet.srcID, packet.ids, packet.costs, packet.time, ptype = packet.type) 
+            up = await updateGraph(packet_srcID, packet.data['neighbours'], packet.data['timestamp'], ptype = packet.data['type']) 
             if up: 
                 await updateRouting('force')
 
     else : 
         print("ERROR: Error in decoding or unknown packet type")
 
-async def sendSocket (me : str, ptype : str , ptime : float) :  
+async def sendSocket (ptype : str , ptime : float) :  
+    me = config['qks']['id']
     d = graph.get_node(me).get_neighbors()
     neighbors = d.keys() 
     for ks in list(ksAddresses.keys()):
@@ -95,31 +97,43 @@ async def sendSocket (me : str, ptype : str , ptime : float) :
         if ks in neighbors:
             
             reader, writer = await asyncio.open_connection(addr['ip'], addr['port'])
-            
+            packet_data = { 'version' : 1, 
+                'source' : {'ID' : me, 'address' : config['qks']['ip'], 'port' :  config['qks']['port']},
+                'routing' : {'address' : config['routing']['ip'], 'port' :  config['routing']['port']}, 
+                'timestamp' : ptime
+                }
             if ptype == 'S': 
                 ids = graph.get_node(me).get_saes()
-                costs = [0] * len(ids)
-                packet = lsaPacket(version = 1, nAdj = len(ids), ptype = 'S', srcID = me, srcIP = config['qks']['ip'], srcPort = config['qks']['port'], routingPort=config['routing']['port'], routingIP=config['routing']['ip'], time = ptime, ids = ids, costs = costs)
+                neighbors = [{'ID' : id} for id in ids]
+                packet_data['neighbors'] = neighbors
+                packet = lsaPacketv2(packet_data)
             elif ptype == 'K': 
                 ids = list(neighbors)
                 costs = list(d.values())
-                packet = lsaPacket(version = 1, nAdj = len(ids), ptype = 'K', srcID = me, srcIP = config['qks']['ip'], srcPort = config['qks']['port'], routingPort=config['routing']['port'], routingIP=config['routing']['ip'], time = ptime, ids = ids, costs = costs)
+                neighbors = [{'ID' : id, 'cost': cost } for id, cost in zip(ids, costs)]
+                packet_data['neighbors'] = neighbors
+                packet = lsaPacketv2(packet_data)
    
             p_enc = packet.encode()
             if (p_enc is not None):
+                size = packet.get_dimension()
+                writer.write(size.to_bytes(2, 'big'))
                 writer.write(p_enc)
             writer.close() 
             await writer.wait_closed()
 
-async def forwardSocket(packet : lsaPacket, ip : str) : 
+async def forwardSocket(packet : lsaPacketv2, ip : str) : 
 
     global config , ksAddresses
-    res = True if (packet.srcID != config['qks']['id'] and ksTimestamps[packet.srcID][packet.type] < packet.time) else False 
+    packet_srcID = packet.data['source']['ID']
+    res = True if (packet_srcID != config['qks']['id'] and ksTimestamps[packet_srcID][packet.data['type']] < packet.data['timestamp']) else False 
     if res: 
         for ks in list(ksAddresses.keys()) :
             addr = ksAddresses[ks]
             if ks in graph.get_node(config['qks']['id']).get_neighbors().keys() and ip != addr['ip']:
                 reader, writer = await asyncio.open_connection(addr['ip'], addr['port'])
+                size = packet.get_dimension()
+                writer.write(size.to_bytes(2, 'big'))
                 writer.write(packet.encode())                  
                 writer.close() 
 
@@ -223,7 +237,6 @@ async def updateGraph(src : str, ids : list, costs : float, timestamp : float, p
 async def lsaUpdate() : 
     global config , graph, redis_client
     timer = config['routing']['timer']
-    me = config['qks']['id']
     n = 0
     print(f"Started task for periodic update every {timer} s")
     while True: 
@@ -236,8 +249,8 @@ async def lsaUpdate() :
             await updateRouting('force')
         else: 
             await updateRouting()
-        await sendSocket(me, 'K', time.time())
-        await sendSocket(me, 'S', time.time())
+        await sendSocket('K', time.time())
+        await sendSocket('S', time.time())
         n += 1
 
         
@@ -260,7 +273,7 @@ async def listenForChanges() :
                     res = graph.remove_sae(name)
                 if res:     
                     await updateRouting('force')
-                    await sendSocket(config['qks']['id'], 'S', time.time())
+                    await sendSocket('S', time.time())
 
 
             elif message['channel'] == config['redis']['topic']+"-link":  
@@ -270,7 +283,7 @@ async def listenForChanges() :
                     res = graph.remove_link(name, config['qks']['id']) 
                 if res: 
                     await updateRouting('force')
-                    await sendSocket(config['qks']['id'], 'S', time.time())
+                    await sendSocket('S', time.time())
 
             elif message['channel'] == config['redis']['topic']+"-qks": # new qks data received as id_routingIP_routingPort  
                 if action == "add":

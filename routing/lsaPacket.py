@@ -215,6 +215,8 @@ class lsaPacketv2():
     def decode(self, rawbytes : bytearray) -> None: 
         raw_string = rawbytes.decode()
         self.data = json.loads(raw_string)
+        if not all(key in self.data for key in element_list) : 
+            self.data = None
 
     def encode(self) -> bytes: 
         if all(key in self.data for key in element_list) : 
