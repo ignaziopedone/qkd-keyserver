@@ -9,7 +9,10 @@ import time
 import yaml 
 import aioredis
 import sys 
+import logging
 
+logging.basicConfig(filename='routing.log', filemode='w', level=logging.INFO)
+logger = logging.getLogger('routing')
 
 ksTimestamps = {}
 ksAddresses = {}
@@ -49,8 +52,10 @@ async def updateLinkCosts():
             qkdm_availability[qkdm_id] = new_av 
             cost = routeCost(old_av, new_av, stream['max_key_count'])
             graph.update_link(config['qks']['id'], stream['dest_qks']['id'], cost)
+            logger.info(f"Costs updater: new cost {cost} from QKDM {qkdm_id}")
 
     return
+
 
 async def receiveSocket(reader : asyncio.StreamReader, writer : asyncio.StreamWriter): 
     global mongo_client, config
@@ -68,16 +73,17 @@ async def receiveSocket(reader : asyncio.StreamReader, writer : asyncio.StreamWr
 
 
     if packet.data is not None and (packet.data['type'] == 'S' or packet.data['type'] == 'K'): 
+        logger.info(f"Receiver: received packet {packet.data['type']} with source {packet.data['source']['ID']}")
         packet_srcID = packet.data['source']['ID']
         packet_routing = packet.data['routing']
         if packet_srcID != config['qks']['id']:
             if (packet_srcID) not in ksAddresses.keys() : 
+                logger.warning(f"Receiver: packet from new source - qks {packet_srcID} added to the network")
                 ksAddresses[packet_srcID] = {'ip' : packet_routing['address'], 'port' : packet_routing['port']}
                 ksTimestamps[packet_srcID] = {'S' : 0.0, 'K' : 0.0}   
                 qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers'] 
                 qks_data = {"_id" : packet_srcID, "connected_SAE" : [], "neighbor_qks" : [], "address" : {"ip" : packet.data['source']['address'], "port" :  packet.data['source']['port']}, "routing_address" : {"ip" : packet_routing['address'], "port" :  packet_routing['port']}}
                 qks_collection.insert_one(qks_data)
-                    
                 graph.add_node(packet_srcID) 
 
             await forwardSocket(packet, writer.get_extra_info('peername')[0])
@@ -86,7 +92,7 @@ async def receiveSocket(reader : asyncio.StreamReader, writer : asyncio.StreamWr
                 await updateRouting('force')
 
     else : 
-        print("ERROR: Error in decoding or unknown packet type")
+        logger.warning(f"Receiver: Error in decoding a packet or unknown packet type")
 
 
 async def sendSocket (ptype : str , ptime : float) :  
@@ -122,6 +128,7 @@ async def sendSocket (ptype : str , ptime : float) :
                 writer.write(p_enc)
             writer.close() 
             await writer.wait_closed()
+            logger.info(f"Sender: sent packet {packet_data['type']} to {ks} ")
 
 
 async def forwardSocket(packet : lsaPacket, ip : str) : 
@@ -133,13 +140,13 @@ async def forwardSocket(packet : lsaPacket, ip : str) :
         for ks in list(ksAddresses.keys()) :
             addr = ksAddresses[ks]
             if ks in graph.get_node(config['qks']['id']).get_neighbors().keys() and ip != addr['ip']:
+                logger.info(f"Forwarding: forwarding packet {packet.data['type']} from {packet.data['source']['ID']}  to {ks}")
                 reader, writer = await asyncio.open_connection(addr['ip'], addr['port'])
                 size = packet.get_dimension()
                 writer.write(size.to_bytes(2, 'big'))
                 writer.write(packet.encode())                  
                 writer.close() 
-
-
+                
 
 async def updateRouting(mode : str = 'standard') -> bool : 
     removed = False 
@@ -160,8 +167,10 @@ async def updateRouting(mode : str = 'standard') -> bool :
                 if ort not in rts: 
                     pipe.delete(ort)
             res = await pipe.execute() 
+        logger.info("Routing tables: updated to Redis")
         return True
     return False
+
 
 def expireRoutes(threshold : float) -> bool : 
     global config 
@@ -172,6 +181,7 @@ def expireRoutes(threshold : float) -> bool :
             removed = True
             for sae in graph.get_node(ks).get_saes(): 
                 graph.remove_sae(sae)
+                logger.info(f"Expiration: sae {sae} removed")
 
     
     for ks, ts in ksTimestamps.items(): 
@@ -179,8 +189,10 @@ def expireRoutes(threshold : float) -> bool :
             for neighbor in graph.get_node(ks).get_neighbors().keys():
                 if neighbor != config['qks']['id'] and ksTimestamps[neighbor]['K'] < threshold: 
                     graph.remove_link(ks, neighbor) 
+                    logger.info(f"Expiration: link {ks}-{neighbor} removed")
                     removed = True
     return removed
+
 
 async def updateGraph(src : str, neighbors : list, timestamp : float, ptype : str) -> bool :
     global mongo_client 
@@ -200,6 +212,7 @@ async def updateGraph(src : str, neighbors : list, timestamp : float, ptype : st
                 up = True
                 graph.add_sae(sae, src)
                 mongo_requests.append(UpdateOne({"_id" : src}, {"$addToSet" : {"connected_sae" : sae}}))
+                logger.info(f"UpdateGraph: added  sae {sae} ")
                 
 
         for sae in old_saes: 
@@ -207,6 +220,7 @@ async def updateGraph(src : str, neighbors : list, timestamp : float, ptype : st
                 up = True
                 graph.remove_sae(sae)  
                 mongo_requests.append(UpdateOne({"_id" : src}, {"$pull" : {"connected_sae" : sae}}))
+                logger.info(f"UpdateGraph: removed sae {sae} ")
 
     elif ptype == 'K' and ksTimestamps[src][ptype] < timestamp: 
 
@@ -224,6 +238,8 @@ async def updateGraph(src : str, neighbors : list, timestamp : float, ptype : st
                     mongo_requests.append(UpdateOne({"_id" : ks}, {"$addToSet" : {"neighbor_qks" : src}}))
                 elif timestamp > ksTimestamps[ks]['K']: 
                     graph.add_link(src, ks, costs[i])
+                    logger.info(f"UpdateGraph: added link {ks}-{src} ")
+
                     
             else : # nodes in old list : update cost 
                 if graph.update_link(src, ks, costs[i]): 
@@ -236,23 +252,26 @@ async def updateGraph(src : str, neighbors : list, timestamp : float, ptype : st
                     graph.remove_link(src, ks)    
                     mongo_requests.append(UpdateOne({"_id" : src}, {"$pull" : {"neighbor_qks" : ks}}))
                     mongo_requests.append(UpdateOne({"_id" : ks}, {"$pull" : {"neighbor_qks" : src}}))
+                    logger.info(f"UpdateGraph: removed link {ks}-{src} ")
 
     if mongo_requests != [] : 
         await qks_collection.bulk_write(mongo_requests) 
 
+        
     return up
+
 
 async def lsaUpdate() : 
     global config , graph, redis_client
     timer = config['routing']['timer']
     n = 0
-    print(f"Started task for periodic update every {timer} s")
+    logger.warning(f"Timer: periodic update every {timer} s")
     while True: 
         await asyncio.sleep(timer)
+        logger.info(f"Timer: update {n} - Redis keys: {await redis_client.keys()}")
         if (n % 10 == 0): 
-            print(f"LSA UPDATE : sending periodic update {n}")
-            graph.print_nodes()
-            print(f"Redis keys: {await redis_client.keys()}")
+            logger.warning(f"Timer: update {n} - Redis keys: {await redis_client.keys()}")
+            #graph.print_nodes()
         if n == 0: 
             await updateRouting('force')
         else: 
@@ -263,16 +282,17 @@ async def lsaUpdate() :
 
         
 async def listenForChanges() : 
-    print("Started task subscribed to redis topic")
     global redis_client, config, graph, cost_param
     res = None 
+
+
     pubsub : aioredis.PubSub = redis_client.pubsub()
     await pubsub.psubscribe(f"{config['redis']['topic']}-**")
-
+    logger.info("PubSUb listener: subscribed to redis topic")
     while True:
         message = await pubsub.get_message(ignore_subscribe_messages=True, timeout = 0.1)
         if message is not None:
-            print(f"LISTEN FOR CHANGES: Subscribe message received from {message['channel']} => {message['data']}")
+            logger.info(f"PubSUb listener: {message['channel']} => {message['data']}")
             action, name = message['data'].split("-")
             if message['channel'] == config['redis']['topic']+"-sae": 
                 if action == "add": 
@@ -305,7 +325,7 @@ async def initData() -> bool :
     # load server and SAE list from mongo and connect to redis 
     global config, redis_client , mongo_client, graph, cost_param, http_client
     redis_client = aioredis.from_url(f"redis://{config['redis']['host']}:{config['redis']['port']}/{config['redis']['db']}", username=config['redis']['user'], password=config['redis']['password'], decode_responses=True) 
-    if not (await redis_client.ping()): 
+    if not (await redis_client.ping()):
         return False
 
     await redis_client.flushdb()
@@ -349,21 +369,21 @@ async def main() :
     config = yaml.safe_load(config_file)
     config_file.close() 
 
-    print(f"starting ROUTING APP: {config['qks']['id']}" )
+    logger.info(f"starting ROUTING APP for server {config['qks']['id']}" )
     try : 
         res = await initData() 
         if not res: 
-            print("ERROR IN INIT ROUTING ALGORITHM")
+            logger.error("INIT ERROR: Redis unreachable or wrong configuration") 
             return 
     except Exception as e:
-        print("ERROR IN INIT ROUTING ALGORITHM")
+        logger.error(f"INIT ERROR: Redis unreachable or wrong configuration. EXCEPTION: {e}") 
         return 
 
 
     # running LSA thread
     lsaUpdateTask = asyncio.create_task(lsaUpdate())
     listenForChangesTask = asyncio.create_task(listenForChanges())
-    
+    logger.info(f"main : created tasks for timer and pubsub listener")
     server = await asyncio.start_server(receiveSocket, '0.0.0.0', int(config['routing']['port']))
     async with server:
         await server.serve_forever()
