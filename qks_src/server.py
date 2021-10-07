@@ -3,13 +3,14 @@ import asyncio
 import api
 import nest_asyncio
 import sys
+import logging 
 
 nest_asyncio.apply()
 app = Quart(__name__)
 serverPort = 4000
 prefix = "/api/v1"
 
-
+logging.basicConfig(filename='qkdm.log', filemode='w', level=logging.INFO)
 
 # NORTHBOUND INTERFACE 
 @app.route(prefix+"/keys/<slave_SAE_ID>/status", methods=['GET'])
@@ -22,11 +23,18 @@ async def getStatus(slave_SAE_ID):
         value = {'message' : "bad request: request param master_SAE_ID is missing"}
         return value, 400 
 
-    status, value = await api.getStatus(slave_SAE_ID, master_SAE_ID)
-    if status: 
-        return value, 200
-    else: 
-        return value, 404
+    try: 
+        status, value = await api.getStatus(slave_SAE_ID, master_SAE_ID)
+        if status: 
+            app.logger.info(f"getStatus: completed for master_SAE {master_SAE_ID} and slave_SAE {slave_SAE_ID}")
+            return value, 200
+        else: 
+            app.logger.info(f"getStatus: error for slave_SAE_ID {slave_SAE_ID} - message = {value['message']}")
+            return value, 404
+    except Exception as e:
+        value = {'mesage' : 'Internal server error'} 
+        app.logger.error(f"getStatus EXCEPTION: {e}")
+        return value, 400
 
 
 @app.route(prefix+"/keys/<slave_SAE_ID>/enc_keys", methods=['POST'])
@@ -42,10 +50,13 @@ async def getKey(slave_SAE_ID):
         extension_mandatory = content['extension_mandatory'] if 'extension_mandatory' in content else None
         status, value = await api.getKey(slave_SAE_ID, master_SAE_ID, number, key_size, extension_mandatory)
         if status: 
+            app.logger.info(f"getKey: completed for master_SAE {master_SAE_ID} and slave_SAE {slave_SAE_ID}")
             return value, 200
         else: 
+            app.logger.info(f"getKey: error for slave_SAE {slave_SAE_ID} - message = {value['message']}")
             return value, 503
     except Exception as e:
+        app.logger.error(f"getKey EXCEPTION: {e}")
         value = {'message' : "bad request: request does not contains a valid json object"}
         return value, 400 
 
@@ -59,10 +70,13 @@ async def getKeyWithKeyIDs(master_SAE_ID):
         slave_SAE_ID = str(content['slave_SAE_ID'])
         status, value = await api.getKeyWithKeyIDs(master_SAE_ID, key_IDs, slave_SAE_ID)
         if status: 
+            app.logger.info(f"getKeyWithKeyIDs: completed for master_SAE {master_SAE_ID} and slave_SAE {slave_SAE_ID}")
             return value, 200
         else: 
+            app.logger.info(f"getKeyWithKeyIDs: error for master_SAE {master_SAE_ID} - message = {value['message']}")
             return value, 503
     except Exception as e:
+        app.logger.error(f"getKeyWithKeyIDs EXCEPTION: {e}")
         value = {'message' : "bad request: request does not contains a valid json object"}
         return value, 400 
 
@@ -70,8 +84,10 @@ async def getKeyWithKeyIDs(master_SAE_ID):
 async def getQKDMs(): 
     status, value = await api.getQKDMs()
     if status: 
+        app.logger.info(f"getQKDMs: completed")
         return value, 200
     else:
+        app.logger.warning(f"getQKDMs: internal error - unable to complete")
         value = {'message' : "internal error"}
         return value, 503
 
@@ -82,10 +98,13 @@ async def registerSAE():
         sae_ID = str(content['id'])
         status, value = await api.registerSAE(sae_ID) 
         if status:
+            app.logger.info(f"registerSAE: completed for SAE {sae_ID}")
             return value, 200
         else:
+            app.logger.warning(f"registerSAE: error for SAE {sae_ID} - message = {value['message']}")
             return value, 503
-    except Exception: 
+    except Exception as e: 
+        app.logger.error(f"registerSAE EXCEPTION: {e}")
         value = {'message' : "error: invalid content"}
         return value, 400
 
@@ -94,45 +113,22 @@ async def unregisterSAE(SAE_ID):
     SAE_ID = str(SAE_ID)
     status, value = await api.unregisterSAE(SAE_ID) 
     if status: 
+        app.logger.info(f"unregisterSAE: completed for SAE {SAE_ID}")
         return value, 200
     else: 
+        app.logger.warning(f"unregisterSAE: error for SAE {SAE_ID} - message = {value['message']}")
         return value, 503
 
-@app.route(prefix+"/preferences", methods=['GET'])
-async def getPreferences() : 
-    # TODO: api function
-    # PREFERENCES SAVED IN REDIS DUE TO CONSISTENCY
-    status = True
-    value = {'preferences': [{'preference1' : 'val1'}]}
-    if status: 
-        return value, 200
-    else: 
-        return value, 503
-
-@app.route(prefix+"/preferences/<preference>", methods=['PUT'])
-async def setPreference(preference) : 
-    # TODO: api function
-    # PREFERENCES SAVED IN REDIS DUE TO CONSISTENCY
-    content = await request.get_json()
-    try:
-        if preference == str(content['preference']):
-            new_value = content['value']
-            status, value = (True, {'message': f"preference {preference} updated"})
-            if status: 
-                return value, 200
-            else: 
-                return value, 503
-    except Exception:
-        value = {'message' : "bad request: request does not contains a valid json object"}
-        return value, 400 
 
 @app.route(prefix+"/qkdms/<qkdm_ID>/streams", methods=['POST'])
 async def startQKDMStream(qkdm_ID) : 
     qkdm_ID = str(qkdm_ID)
     status, value = await api.startQKDMStream(qkdm_ID)
     if status: 
+        app.logger.info(f"startQKDMStream: completed for qkdm {qkdm_ID}")
         return value, 200
     else: 
+        app.logger.warning(f"startQKDMStream: completed for qkdm {qkdm_ID} - message = {value['message']}")
         return value, 503
 
 @app.route(prefix+"/qkdms/<qkdm_ID>/streams", methods=['DELETE'])
@@ -140,8 +136,10 @@ async def deleteQKDMStreams(qkdm_ID) :
     qkdm_ID = str(qkdm_ID)
     status, value = await api.deleteQKDMStreams(qkdm_ID)
     if status: 
+        app.logger.info(f"deleteQKDMStreams: completed for qkdm {qkdm_ID}")
         return value, 200
     else: 
+        app.logger.warning(f"deleteQKDMStreams: completed for qkdm {qkdm_ID} - message = {value['message']}")
         return value, 503
     
 
@@ -158,10 +156,13 @@ async def registerQKS():
         
         status, value = await api.registerQKS(QKS_ID, QKS_IP, QKS_port, routing_IP, routing_port)
         if status: 
+            app.logger.warning(f"registerQKS: completed for qks {QKS_ID}")
             return value, 200
         else: 
+            app.logger.warning(f"registerQKS: error for qks {QKS_ID} - message = {value['message']}")
             return value, 503
     except Exception as e:
+        app.logger.error(f"registerQKS EXCEPTION: {e}")
         value = {'message' : "error: invalid content"}
         return value, 400
 
@@ -174,10 +175,13 @@ async def deleteIndirectStream(qks_ID) :
         force_mode = True if param == 1 else False 
         status, value = await api.deleteIndirectStream(qks_ID, force_mode)
         if status: 
+            app.logger.info(f"deleteIndirectStream: completed for stream to qks {qks_ID}")
             return value, 200
         else: 
+            app.logger.warning(f"deleteIndirectStream: error for stream to qks {qks_ID} - message = {value['message']}")
             return value, 503
     except Exception as e:
+        app.logger.error(f"deleteIndirectStream EXCEPTION: {e}")
         value = {'message' : "error: invalid content"}
         return value, 400
 
@@ -198,10 +202,13 @@ async def registerQKDM():
         
         status, value = await api.registerQKDM(QKDM_ID, protocol, QKDM_IP, QKDM_port, reachable_qkdm, reachable_qks, max_key_count, key_size)
         if status: 
+            app.logger.warning(f"registerQKDM: completed for qkdm_ID = {QKDM_ID}")
             return value, 200
         else: 
+            app.logger.warning(f"registerQKDM: error for qkdm_ID = {QKDM_ID} - message = {value['message']}")
             return value, 503
-    except Exception:
+    except Exception as e:
+        app.logger.error(f"registerQKDM EXCEPTION: {e}")
         value = {'message' : "error: invalid content"}
         return value, 400
 
@@ -210,8 +217,10 @@ async def unregisterQKDM(qkdm_ID):
     qkdm_ID = str(qkdm_ID)
     status, value = await api.unregisterQKDM(qkdm_ID) 
     if status: 
+        app.logger.warning(f"unregisterQKDM: completed for qkdm_ID = {qkdm_ID}")
         return value, 200
     else: 
+        app.logger.warning(f"unregisterQKDM: error for qkdm_ID = {qkdm_ID} - message = {value['message']}")
         return value, 503 
 
 
@@ -227,11 +236,15 @@ async def reserveKeys(master_SAE_ID):
         key_ID_list = list(content['key_ID_list'])
 
         status, value = await api.reserveKeys(master_SAE_ID, slave_SAE_ID, key_stream_ID, key_size, key_ID_list)
+        
         if status: 
+            app.logger.info(f"reserveKeys: completed for key_stream_ID = {key_stream_ID}")
             return value, 200
         else: 
+            app.logger.warning(f"reserveKeys: error for key_stream_ID = {key_stream_ID} - message = {value['message']}")
             return value, 503
     except Exception as e: 
+        app.logger.error(f"reserveKeys EXCEPTION: {e}")
         value = {'message' : "error: invalid content"}
         return value, 400
 
@@ -245,13 +258,15 @@ async def forwardData():
         iv = str(content['iv'])
         destination_sae = str(content['destination_sae']) 
         
-        # call function  
         status, value = await api.forwardData(data, decryption_key_ID, decryption_stream_ID, iv, destination_sae) 
         if status: 
+            app.logger.info(f"forwardData: completed for destination_sae = {destination_sae}")
             return value, 200 
         else: 
+            app.logger.warning(f"forwardData: error for destination_sae = {destination_sae} - message = {value['message']}")
             return value, 503 
     except Exception as e: 
+        app.logger.error(f"forwardData EXCEPTION: {e}")
         value = {'message' : "error: invalid content"}
         return value, 400
 
@@ -268,10 +283,13 @@ async def createStream():
 
         status, value = await api.createStream(source_qks_ID, key_stream_ID, stream_type, qkdm_id, master_key_id, destination_sae)
         if status: 
+            app.logger.info(f"createStream: completed for key_stream_ID = {key_stream_ID}, type = {stream_type}")
             return value, 200
         else: 
+            app.logger.warning(f"createStream: error for key_stream_ID = {key_stream_ID}, type = {stream_type} - message = {value['message']}")
             return value, 503
     except Exception as e:
+        app.logger.error(f"createStream EXCEPTION: {e}")
         value = {'message' : "error: invalid content"}
         return value, 400
         
@@ -282,12 +300,16 @@ async def closeStream(key_stream_ID):
     try:
         source_qks_ID = str(content['source_qks_ID'])
         status, value = await api.closeStream(key_stream_ID, source_qks_ID)
+        
         if status: 
+            app.logger.info(f"closeStream: completed for key_stream_ID = {key_stream_ID}")
             return value, 200
         else: 
+            app.logger.warning(f"closeStream: error for key_stream_ID = {key_stream_ID} - message = {value['message']}")
             return value, 503
 
-    except Exception: 
+    except Exception as e: 
+        app.logger.error(f"closeStream EXCEPTION: {e}")
         value = {'message' : "error: invalid content"}
         return value, 400
 
@@ -301,20 +323,22 @@ async def exchangeIndirectKey(key_stream_ID) :
         enc_keys = list(content['enc_keys'])
         ids = list(content['ids'])
         status, value = await api.exchangeIndirectKey(key_stream_ID, iv, number, enc_keys, ids)
+        
         if status: 
+            app.logger.info(f"exchangeIndirectKey: exchanged for key_stream_ID = {key_stream_ID}, ids = {ids}")
             return value, 200
         else: 
+            app.logger.warning(f"exchangeIndirectKey: error for key_stream_ID = {key_stream_ID}, message = {status['message']}")
             return value, 503
 
     except Exception as e: 
+        app.logger.error(f"exchangeIndirectKey EXCEPTION: {e}")
         value = {'message' : "error: invalid content"}
         return value, 400
 
 
 async def main() : 
     global app, serverPort
-            
-    
 
     # check db and vault init 
     if len(sys.argv) == 2:
@@ -322,11 +346,9 @@ async def main() :
     else: 
         status, serverPort = await api.init_server()
     if not status: 
-        print("ERROR : unable to init DB or Vault ")
+        app.logger.error(f"ERROR: unable to init DB or Vault")
         return  
 
-
-    print("SUCCESSFULL INIT: server starting on port", serverPort)
     app.run(host='0.0.0.0', port=serverPort, loop = asyncio.get_event_loop())
 
 

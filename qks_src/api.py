@@ -20,19 +20,18 @@ vault_client : VaultClient = None
 redis_client : Redis = None
 http_client : aiohttp.ClientSession = None
 
-
 # NORTHBOUND 
 async def getStatus(slave_SAE_ID : str, master_SAE_ID : str) -> tuple[bool, dict] : 
     global mongo_client, http_client, redis_client, vault_client
     key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
-    master_sae_rt = await redis_client.hgetall(master_SAE_ID) #me = await qks_collection.find_one({"_id" : config['qks']['id']})
+    master_sae_rt = await redis_client.hgetall(master_SAE_ID) 
     if not master_sae_rt or master_sae_rt['dest'] != config['qks']['id']: 
         status = {"message" : "master_SAE_ID not registered on this host"}
         return (False, status)
 
-    sae_rt = await redis_client.hgetall(slave_SAE_ID) #dest_qks = await qks_collection.find_one({ "connected_sae": slave_SAE_ID }) 
+    sae_rt = await redis_client.hgetall(slave_SAE_ID) 
     # if slave_SAE is present in this qkd network
     if not sae_rt : #is not None:  -> check if the returned dict is not empty 
         status = {"message" : "slave_SAE_ID not found in this qkd network"}
@@ -45,7 +44,7 @@ async def getStatus(slave_SAE_ID : str, master_SAE_ID : str) -> tuple[bool, dict
     
     res = {
         'source_KME_ID': config['qks']['id'],
-        'target_KME_ID': sae_rt['dest'], # dest_qks['_id'],
+        'target_KME_ID': sae_rt['dest'],
         'master_SAE_ID': master_SAE_ID,
         'slave_SAE_ID': slave_SAE_ID,
         'max_key_per_request': int(config['qks']['max_key_per_request']),
@@ -113,11 +112,9 @@ async def getStatus(slave_SAE_ID : str, master_SAE_ID : str) -> tuple[bool, dict
 
         await key_stream_collection.insert_one(key_stream)
 
-
         res['key_size'] = key_stream['standard_key_size']
         res['max_key_count'] = key_stream['max_key_count']
         res['stored_key_count'] = key_stream['indirect_data']['available_keys']
-        
         return (True, res)
  
 async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : int = None, extensions = None ) -> tuple[bool, dict] :
@@ -340,15 +337,6 @@ async def unregisterSAE(sae_ID: str) -> tuple[bool, dict]:
         await redis_client.publish(f"{config['redis']['topic']}-sae", f"remove-{sae_ID}")
         value = {"message" : "SAE successfully removed from this server"}
         return (True, value) 
-
-# TODO
-async def getPreferences() : 
-    preferences = {}
-    return preferences
-
-# TODO
-async def setPreference(preference:str, value) : 
-    return 
 
 async def startQKDMStream(qkdm_ID:str) -> tuple[bool, dict] : 
     global mongo_client, config, http_client
@@ -1012,10 +1000,9 @@ async def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]
         await vault_client.remove(config['qks']['id'], master_key_id)
         await vault_client.remove(config['qks']['id'], key_stream_ID) # delete everything under that stream_id 
         await stream_collection.delete_one({"_id" : key_stream_ID})
-
-
         
-        return (True, "direct stream successfully closed") 
+        value = {'message' : "indirect stream successfully closed"}
+        return (True, value) 
 
 
 async def exchangeIndirectKey(key_stream_ID : str, iv_b64 : str, number : int , enc_keys_b64 : list, ids : list) -> tuple[bool, dict] :  
