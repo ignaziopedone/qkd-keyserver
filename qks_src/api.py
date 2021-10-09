@@ -1080,9 +1080,10 @@ async def init_server(config_file_name = "qks_src/config_files/config.yaml") -> 
         print("redis exception:", e)
         return (False, -1)
 
-    http_client = aiohttp.ClientSession()
 
-    return (True, config['qks']['port'])
+    http_client = aiohttp.ClientSession()
+    keycloack_issuer = f"http://{config['keycloak']['address']}:{config['keycloak']['port']}/auth/realm/{config['keycloak']['realm']}"
+    return (True, config['qks']['port'], keycloack_issuer)
 
 async def sendIndirectKey(key_stream_obj : dict, number : int) -> tuple[bool, list] : 
     global vault_client, http_client, config, mongo_client

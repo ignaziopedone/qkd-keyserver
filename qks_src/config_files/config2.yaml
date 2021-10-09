@@ -9,17 +9,17 @@ qks:
   id: qks2
   ip: 172.18.0.182
   port: 4000
-  max_key_per_request: 10
+  max_key_per_request: 20
   max_key_size: 512
   min_key_size: 128
   max_sae_id_count: 0
   indirect_key_size: 256
-  indirect_max_key_count: 10
+  indirect_max_key_count: 20
 vault: 
   host : 172.18.0.20
   port : 8200
-  token : s.Zh9sFpgtXJeMeXlPz47dZX0k
-  key64 : HJUxGf7qFQCuFOO6eytZ3yU03LhixE0ThmXNzp1Bgio=
+  token : s.SVrGCFg6s5SfaWOKSa4lHDLF
+  key64 : vkY52pN+DABjeDaq1lsPbm3OHGYSg/A4UfRwcGN4ygE=
 redis: 
   user: root
   password: password 
@@ -27,3 +27,7 @@ redis:
   host: 172.18.0.30
   port: 6379
   db : 2
+keycloak: 
+  realm: qks
+  address: localhost
+  port : 8080

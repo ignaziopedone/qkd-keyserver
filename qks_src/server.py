@@ -1,27 +1,43 @@
-from quart import request, Quart
+from quart import request, Quart, g
 import asyncio
 import api
 import nest_asyncio
 import sys
 import logging 
+from flask_oidc import OpenIDConnect
 
 nest_asyncio.apply()
 app = Quart(__name__)
 serverPort = 4000
 prefix = "/api/v1"
-
 logging.basicConfig(filename='qkdm.log', filemode='w', level=logging.INFO)
+oidc : OpenIDConnect = None
+
+app.config.update({
+    'SECRET_KEY': 'SomethingNotEntirelySecret',
+    'OIDC_CLIENT_SECRETS': './client_secrets.json',
+    'OIDC_VALID_ISSUERS': [],
+    'OIDC_INTROSPECTION_AUTH_METHOD': 'client_secret_post',
+    'OIDC_TOKEN_TYPE_HINT': 'access_token',
+    'OIDC_OPENID_REALM': 'qks',
+    'OIDC_RESOURCE_SERVER_ONLY' : True,
+    'OIDC-SCOPES':['openid']
+})
+
 
 # NORTHBOUND INTERFACE 
 @app.route(prefix+"/keys/<slave_SAE_ID>/status", methods=['GET'])
+@oidc.accept_token(True)
 async def getStatus(slave_SAE_ID):
-    slave_SAE_ID = str(slave_SAE_ID)
-    master_SAE_ID = None # TODO: get it from authentication! 
-    master_SAE_ID = request.args.get('master_SAE_ID')
 
-    if master_SAE_ID is None: 
-        value = {'message' : "bad request: request param master_SAE_ID is missing"}
-        return value, 400 
+    roles = g.oidc_token_info['realm_access']['roles']
+    master_SAE_ID = g.oidc_token_info['name']
+     
+    if not any(r in roles for r in ['sae', 'admin']): 
+        value =  {'message' : "ERROR: you are not an authorized SAE or ADMIN"}
+        return value, 401
+
+    slave_SAE_ID = str(slave_SAE_ID)
 
     try: 
         status, value = await api.getStatus(slave_SAE_ID, master_SAE_ID)
@@ -38,13 +54,20 @@ async def getStatus(slave_SAE_ID):
 
 
 @app.route(prefix+"/keys/<slave_SAE_ID>/enc_keys", methods=['POST'])
+@oidc.accept_token(True)
 async def getKey(slave_SAE_ID):
-    slave_SAE_ID = str(slave_SAE_ID)
-    master_SAE_ID = None # TODO: get it from authentication! 
+    
+    roles = g.oidc_token_info['realm_access']['roles']
+    master_SAE_ID = g.oidc_token_info['name']
+
+    if 'sae' not in roles: 
+        value =  {'message' : "ERROR: you are not an authorized SAE"}
+        return value, 401
+    
+    slave_SAE_ID = str(slave_SAE_ID) 
     content = await request.get_json()
     
     try: 
-        master_SAE_ID = str(content['master_SAE_ID']) # TO BE REMOVED
         number = int(content['number']) if 'number' in content else 1
         key_size = int(content['size']) if 'size' in content else None
         extension_mandatory = content['extension_mandatory'] if 'extension_mandatory' in content else None
@@ -61,13 +84,19 @@ async def getKey(slave_SAE_ID):
         return value, 400 
 
 @app.route(prefix+"/keys/<master_SAE_ID>/dec_keys", methods=['POST'])
+@oidc.accept_token(True)
 async def getKeyWithKeyIDs(master_SAE_ID):
-    slave_SAE_ID = None # TODO: get it from authentication! 
+    roles = g.oidc_token_info['realm_access']['roles']
+    slave_SAE_ID = g.oidc_token_info['name']
+
+    if 'sae' not in roles: 
+        value =  {'message' : "ERROR: you are not an authorized SAE"}
+        return value, 401
+    
     master_SAE_ID = str(master_SAE_ID)
     content = await request.get_json() 
     try:      
         key_IDs = list(content['key_IDs'])
-        slave_SAE_ID = str(content['slave_SAE_ID'])
         status, value = await api.getKeyWithKeyIDs(master_SAE_ID, key_IDs, slave_SAE_ID)
         if status: 
             app.logger.info(f"getKeyWithKeyIDs: completed for master_SAE {master_SAE_ID} and slave_SAE {slave_SAE_ID}")
@@ -81,7 +110,14 @@ async def getKeyWithKeyIDs(master_SAE_ID):
         return value, 400 
 
 @app.route(prefix+"/qkdms", methods=['GET'])
+@oidc.accept_token(True)
 async def getQKDMs(): 
+
+    roles = g.oidc_token_info['realm_access']['roles']
+    if 'admin' not in roles: 
+        value =  {'message' : "ERROR: you are not an authorized ADMIN"}
+        return value, 401
+
     status, value = await api.getQKDMs()
     if status: 
         app.logger.info(f"getQKDMs: completed")
@@ -92,10 +128,23 @@ async def getQKDMs():
         return value, 503
 
 @app.route(prefix+"/saes", methods=['POST'])
+@oidc.accept_token(True)
 async def registerSAE(): 
+
+    roles = g.oidc_token_info['realm_access']['roles']
+    auth_ID = g.oidc_token_info['name']
+
+    if not any(r in roles for r in ['sae', 'admin']): 
+        value =  {'message' : "ERROR: you are not an authorized SAE or ADMIN"}
+        return value, 401
+
     content = await request.get_json()
+    sae_ID = str(content['id'])
+    if ('sae' in roles and auth_ID != sae_ID):
+            value = {'message' : "ERROR: unauthorized, you can register only yourself!"}
+            return value, 403
+    
     try:
-        sae_ID = str(content['id'])
         status, value = await api.registerSAE(sae_ID) 
         if status:
             app.logger.info(f"registerSAE: completed for SAE {sae_ID}")
@@ -109,8 +158,22 @@ async def registerSAE():
         return value, 400
 
 @app.route(prefix+"/saes/<SAE_ID>", methods=['DELETE'])
+@oidc.accept_token(True)
 async def unregisterSAE(SAE_ID): 
+
+    roles = g.oidc_token_info['realm_access']['roles']
+    auth_ID = g.oidc_token_info['name']
+
+    if not any(r in roles for r in ['sae', 'admin']): 
+        value =  {'message' : "ERROR: you are not an authorized SAE or ADMIN"}
+        return value, 401
+
+    content = await request.get_json()
     SAE_ID = str(SAE_ID)
+    if ('sae' in roles and auth_ID != SAE_ID):
+            value = {'message' : "ERROR: unauthorized, you can unregister only yourself!"}
+            return value, 403
+    
     status, value = await api.unregisterSAE(SAE_ID) 
     if status: 
         app.logger.info(f"unregisterSAE: completed for SAE {SAE_ID}")
@@ -121,7 +184,14 @@ async def unregisterSAE(SAE_ID):
 
 
 @app.route(prefix+"/qkdms/<qkdm_ID>/streams", methods=['POST'])
+@oidc.accept_token(True)
 async def startQKDMStream(qkdm_ID) : 
+
+    roles = g.oidc_token_info['realm_access']['roles']
+    if 'admin' not in roles: 
+        value =  {'message' : "ERROR: you are not an authorized ADMIN"}
+        return value, 401
+
     qkdm_ID = str(qkdm_ID)
     status, value = await api.startQKDMStream(qkdm_ID)
     if status: 
@@ -132,7 +202,14 @@ async def startQKDMStream(qkdm_ID) :
         return value, 503
 
 @app.route(prefix+"/qkdms/<qkdm_ID>/streams", methods=['DELETE'])
+@oidc.accept_token(True)
 async def deleteQKDMStreams(qkdm_ID) : 
+
+    roles = g.oidc_token_info['realm_access']['roles']
+    if 'admin' not in roles: 
+        value =  {'message' : "ERROR: you are not an authorized ADMIN"}
+        return value, 401
+
     qkdm_ID = str(qkdm_ID)
     status, value = await api.deleteQKDMStreams(qkdm_ID)
     if status: 
@@ -144,7 +221,14 @@ async def deleteQKDMStreams(qkdm_ID) :
     
 
 @app.route(prefix+"/qks", methods=['POST'])
+@oidc.accept_token(True)
 async def registerQKS(): 
+    
+    roles = g.oidc_token_info['realm_access']['roles']
+    if 'admin' not in roles: 
+        value =  {'message' : "ERROR: you are not an authorized ADMIN"}
+        return value, 401
+    
     content = await request.get_json()
     try:
         QKS_ID = str(content['QKS_ID'])
@@ -168,7 +252,14 @@ async def registerQKS():
 
 
 @app.route(prefix+"/qks/<qks_ID>/streams", methods=['DELETE'])
-async def deleteIndirectStream(qks_ID) : 
+@oidc.accept_token(True)
+async def deleteIndirectStream(qks_ID) :
+
+    roles = g.oidc_token_info['realm_access']['roles']
+    if 'admin' not in roles: 
+        value =  {'message' : "ERROR: you are not an authorized ADMIN"}
+        return value, 401
+
     try: 
         qks_ID = str(qks_ID)
         param = int(request.args.get('force', 0, int))
@@ -188,10 +279,24 @@ async def deleteIndirectStream(qks_ID) :
 
 # SOUTHBOUND INTERFACE 
 @app.route(prefix+"/qkdms", methods=['POST'])
+@oidc.accept_token(True)
 async def registerQKDM(): 
+
+    auth_ID = g.oidc_token_info['name']
+    roles = g.oidc_token_info['realm_access']['roles']
+    if 'qkdm' not in roles: 
+        value =  {'message' : "ERROR: you are not an authorized QKDM"}
+        return value, 401
+
     content = await request.get_json()
+
+    QKDM_ID = str(content['QKDM_ID']) if 'QKDM_ID' in content else None
+
+    if auth_ID != QKDM_ID : 
+        value = {'message' : "ERROR: unauthorized, you can register only yourself!"}
+        return value, 403
+
     try:
-        QKDM_ID = str(content['QKDM_ID'])
         protocol = str(content['protocol']) 
         QKDM_IP = str(content['QKDM_IP']) 
         QKDM_port = int(content['QKDM_port']) 
@@ -214,7 +319,19 @@ async def registerQKDM():
 
 @app.route(prefix+"/qkdms/<qkdm_ID>", methods=['DELETE'])
 async def unregisterQKDM(qkdm_ID): 
+
+    roles = g.oidc_token_info['realm_access']['roles']
+    auth_ID = g.oidc_token_info['name']
+
+    if not any(r in roles for r in ['qkdm', 'admin']): 
+        value =  {'message' : "ERROR: you are not an authorized QKDM or ADMIN"}
+        return value, 401
+
     qkdm_ID = str(qkdm_ID)
+    if ('qkdm' in roles and auth_ID != qkdm_ID) : 
+        value = {'message' : "ERROR: unauthorized, you can register only yourself!"}
+        return value, 403
+
     status, value = await api.unregisterQKDM(qkdm_ID) 
     if status: 
         app.logger.warning(f"unregisterQKDM: completed for qkdm_ID = {qkdm_ID}")
@@ -338,17 +455,19 @@ async def exchangeIndirectKey(key_stream_ID) :
 
 
 async def main() : 
-    global app, serverPort
+    global app, serverPort, oidc
 
     # check db and vault init 
     if len(sys.argv) == 2:
-        status, serverPort = await api.init_server(sys.argv[1])
+        status, serverPort, keycloack_issuer = await api.init_server(sys.argv[1])
     else: 
-        status, serverPort = await api.init_server()
+        status, serverPort, keycloack_issuer = await api.init_server()
     if not status: 
         app.logger.error(f"ERROR: unable to init DB or Vault")
         return  
 
+    app.config.update({'OIDC_VALID_ISSUERS': [keycloack_issuer]})
+    oidc = OpenIDConnect(app)
     app.run(host='0.0.0.0', port=serverPort, loop = asyncio.get_event_loop())
 
 
