@@ -9,3 +9,4 @@ nest-asyncio==1.5.1
 pymongo==3.11.4
 PyYAML==5.4.1
 Quart==0.15.1
+flask-oidc==1.4.0
