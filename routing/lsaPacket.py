@@ -1,5 +1,6 @@
+import json
 element_list = ["version", "type", "source", "routing", "neighbors", "timestamp"]
-   
+
 class lsaPacket(): 
     def __init__(self, data : dict = {}, json_size : int = None) -> int: 
         self.data = data

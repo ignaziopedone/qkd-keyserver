@@ -63,72 +63,79 @@ async def receiveSocket(reader : asyncio.StreamReader, writer : asyncio.StreamWr
     size = int.from_bytes(await reader.read(2), 'big') 
     packet = lsaPacket()
 
-    read_size = nextPowerOf2(size)
-    raw_packet = await reader.read(read_size)
+    try: 
+        read_size = nextPowerOf2(size)
+        raw_packet = await reader.read(read_size)
 
-    if len(raw_packet) == size :
-        packet.decode(raw_packet)
-    writer.close()
-    await writer.wait_closed()
+        if len(raw_packet) == size :
+            packet.decode(raw_packet)
+        writer.close()
+        await writer.wait_closed()
 
+        if packet.data is not None and (packet.data['type'] == 'S' or packet.data['type'] == 'K'): 
+            logger.info(f"Receiver: received packet {packet.data['type']} with source {packet.data['source']['ID']}")
+            packet_srcID = packet.data['source']['ID']
+            packet_routing = packet.data['routing']
+            if packet_srcID != config['qks']['id']:
+                if (packet_srcID) not in ksAddresses.keys() : 
+                    logger.warning(f"Receiver: packet from new source - qks {packet_srcID} added to the network")
+                    ksAddresses[packet_srcID] = {'ip' : packet_routing['address'], 'port' : packet_routing['port']}
+                    ksTimestamps[packet_srcID] = {'S' : 0.0, 'K' : 0.0}   
+                    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers'] 
+                    qks_data = {"_id" : packet_srcID, "connected_SAE" : [], "neighbor_qks" : [], "address" : {"ip" : packet.data['source']['address'], "port" :  packet.data['source']['port']}, "routing_address" : {"ip" : packet_routing['address'], "port" :  packet_routing['port']}}
+                    qks_collection.insert_one(qks_data)
+                    graph.add_node(packet_srcID) 
 
-    if packet.data is not None and (packet.data['type'] == 'S' or packet.data['type'] == 'K'): 
-        logger.info(f"Receiver: received packet {packet.data['type']} with source {packet.data['source']['ID']}")
-        packet_srcID = packet.data['source']['ID']
-        packet_routing = packet.data['routing']
-        if packet_srcID != config['qks']['id']:
-            if (packet_srcID) not in ksAddresses.keys() : 
-                logger.warning(f"Receiver: packet from new source - qks {packet_srcID} added to the network")
-                ksAddresses[packet_srcID] = {'ip' : packet_routing['address'], 'port' : packet_routing['port']}
-                ksTimestamps[packet_srcID] = {'S' : 0.0, 'K' : 0.0}   
-                qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers'] 
-                qks_data = {"_id" : packet_srcID, "connected_SAE" : [], "neighbor_qks" : [], "address" : {"ip" : packet.data['source']['address'], "port" :  packet.data['source']['port']}, "routing_address" : {"ip" : packet_routing['address'], "port" :  packet_routing['port']}}
-                qks_collection.insert_one(qks_data)
-                graph.add_node(packet_srcID) 
+                await forwardSocket(packet, writer.get_extra_info('peername')[0])
+                up = await updateGraph(packet_srcID, packet.data['neighbors'], packet.data['timestamp'], ptype = packet.data['type']) 
+                if up: 
+                    await updateRouting('force')
 
-            await forwardSocket(packet, writer.get_extra_info('peername')[0])
-            up = await updateGraph(packet_srcID, packet.data['neighbors'], packet.data['timestamp'], ptype = packet.data['type']) 
-            if up: 
-                await updateRouting('force')
-
-    else : 
-        logger.warning(f"Receiver: Error in decoding a packet or unknown packet type")
+        else : 
+            logger.warning(f"Receiver: Error in decoding a packet or unknown packet type")
+    except Exception as e: 
+        logger.error(f"Exception in receiveSocket: {e}")
 
 
 async def sendSocket (ptype : str , ptime : float) :  
     me = config['qks']['id']
     d = graph.get_node(me).get_neighbors()
-    neighbors = d.keys() 
+    neighbors = list(d.keys()) 
+    logger.info(f"Current neighbors: {neighbors}, QKS in the network: {list(ksAddresses.keys())}")
     for ks in list(ksAddresses.keys()):
-        addr = ksAddresses[ks] 
-        if ks in neighbors:
-            reader, writer = await asyncio.open_connection(addr['ip'], addr['port'])
-            packet_data = { 'version' : 1, 
-                'source' : {'ID' : me, 'address' : config['qks']['ip'], 'port' :  config['qks']['port']},
-                'routing' : {'address' : config['routing']['ip'], 'port' :  config['routing']['port']}, 
-                'timestamp' : ptime,
-                'type' : ptype 
-                }
-            if ptype == 'S': 
-                ids = graph.get_node(me).get_saes()
-                neighbors = [{'ID' : id} for id in ids]
-                packet_data['neighbors'] = neighbors
-                packet = lsaPacket(packet_data)
-            elif ptype == 'K': 
-                ids = list(neighbors)
-                costs = list(d.values())
-                neighbors = [{'ID' : id, 'cost': cost } for id, cost in zip(ids, costs)]
-                packet_data['neighbors'] = neighbors
-                packet = lsaPacket(packet_data)
+        try: 
+            addr = ksAddresses[ks] 
+            if ks in neighbors:
+                logger.info(f"Sender: trying sending packet {ptype} to {ks} ")
+                reader, writer = await asyncio.open_connection(addr['ip'], addr['port'])
+                packet_data = { 'version' : 1, 
+                    'source' : {'ID' : me, 'address' : config['qks']['ip'], 'port' :  config['qks']['port']},
+                    'routing' : {'address' : config['routing']['ip'], 'port' :  config['routing']['port']}, 
+                    'timestamp' : ptime,
+                    'type' : ptype 
+                    }
+                if ptype == 'S': 
+                    ids = graph.get_node(me).get_saes()
+                    packet_neighbors = [{'ID' : id} for id in ids]
+                    packet_data['neighbors'] = packet_neighbors
+                    packet = lsaPacket(packet_data)
+                elif ptype == 'K': 
+                    ids = list(neighbors)
+                    costs = list(d.values())
+                    packet_neighbors = [{'ID' : id, 'cost': cost } for id, cost in zip(ids, costs)]
+                    packet_data['neighbors'] = packet_neighbors
+                    packet = lsaPacket(packet_data)
 
-            p_enc = packet.encode()
-            if (p_enc is not None):
-                size = packet.get_dimension()
-                writer.write(size.to_bytes(2, 'big'))
-                writer.write(p_enc)
-            writer.close() 
-            await writer.wait_closed()
-            logger.info(f"Sender: sent packet {packet_data['type']} to {ks} ")
+                p_enc = packet.encode()
+                if (p_enc is not None):
+                    size = packet.get_dimension()
+                    writer.write(size.to_bytes(2, 'big'))
+                    writer.write(p_enc)
+                writer.close() 
+                await writer.wait_closed()
+                logger.info(f"Sender: sent packet {packet_data['type']} to {ks} ")
+        except Exception as e: 
+            logger.error(f"Exception in sendSocket: {e}")
 
 
 async def forwardSocket(packet : lsaPacket, ip : str) : 

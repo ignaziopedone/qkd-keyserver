@@ -73,7 +73,7 @@ services:
                 ipv4_address: 172.18.0.181
 
     routing1:
-        image: routing:async2
+        image: routing:async
         container_name : routing_1
         ports: 
             - 7001:7000 
@@ -105,7 +105,7 @@ services:
                 ipv4_address: 172.18.0.182
 
     routing2:
-        image: routing:async2
+        image: routing:async
         container_name : routing_2
         ports: 
             - 7002:7000 
@@ -136,6 +136,7 @@ services:
             frontend: 
                 ipv4_address: 172.18.0.100
 
+
     ##### QKS 3 SERVICES
     qks3:
         image: qks:async
@@ -148,7 +149,7 @@ services:
                 ipv4_address: 172.18.0.183
 
     routing3:
-        image: routing:async2
+        image: routing:async
         container_name : routing_3
         ports: 
             - 7003:7000 
@@ -167,4 +168,5 @@ services:
         networks: 
             frontend: 
                 ipv4_address: 172.18.0.103
+
 
