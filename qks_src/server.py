@@ -1,29 +1,30 @@
-from quart import request, Quart, g
+from quart import request, Quart, g, flask_patch
 import asyncio
 import api
 import nest_asyncio
 import sys
 import logging 
 from flask_oidc import OpenIDConnect
+import traceback
 
 nest_asyncio.apply()
 app = Quart(__name__)
 serverPort = 4000
 prefix = "/api/v1"
-logging.basicConfig(filename='qkdm.log', filemode='w', level=logging.INFO)
-oidc : OpenIDConnect = None
+logging.basicConfig(filename='qks.log', filemode='w', level=logging.INFO)
 
 app.config.update({
     'SECRET_KEY': 'SomethingNotEntirelySecret',
     'OIDC_CLIENT_SECRETS': './client_secrets.json',
-    'OIDC_VALID_ISSUERS': [],
     'OIDC_INTROSPECTION_AUTH_METHOD': 'client_secret_post',
     'OIDC_TOKEN_TYPE_HINT': 'access_token',
     'OIDC_OPENID_REALM': 'qks',
     'OIDC_RESOURCE_SERVER_ONLY' : True,
-    'OIDC-SCOPES':['openid']
+    'OIDC-SCOPES':['openid'], 
 })
 
+oidc = OpenIDConnect()
+oidc.init_app(app)
 
 # NORTHBOUND INTERFACE 
 @app.route(prefix+"/keys/<slave_SAE_ID>/status", methods=['GET'])
@@ -31,7 +32,7 @@ app.config.update({
 async def getStatus(slave_SAE_ID):
 
     roles = g.oidc_token_info['realm_access']['roles']
-    master_SAE_ID = g.oidc_token_info['name']
+    master_SAE_ID = g.oidc_token_info['username']
      
     if not any(r in roles for r in ['sae', 'admin']): 
         value =  {'message' : "ERROR: you are not an authorized SAE or ADMIN"}
@@ -58,7 +59,7 @@ async def getStatus(slave_SAE_ID):
 async def getKey(slave_SAE_ID):
     
     roles = g.oidc_token_info['realm_access']['roles']
-    master_SAE_ID = g.oidc_token_info['name']
+    master_SAE_ID = g.oidc_token_info['username']
 
     if 'sae' not in roles: 
         value =  {'message' : "ERROR: you are not an authorized SAE"}
@@ -79,7 +80,7 @@ async def getKey(slave_SAE_ID):
             app.logger.info(f"getKey: error for slave_SAE {slave_SAE_ID} - message = {value['message']}")
             return value, 503
     except Exception as e:
-        app.logger.error(f"getKey EXCEPTION: {e}")
+        app.logger.error(f"getKey EXCEPTION: {traceback.format_exc()}")
         value = {'message' : "bad request: request does not contains a valid json object"}
         return value, 400 
 
@@ -87,7 +88,7 @@ async def getKey(slave_SAE_ID):
 @oidc.accept_token(True)
 async def getKeyWithKeyIDs(master_SAE_ID):
     roles = g.oidc_token_info['realm_access']['roles']
-    slave_SAE_ID = g.oidc_token_info['name']
+    slave_SAE_ID = g.oidc_token_info['username']
 
     if 'sae' not in roles: 
         value =  {'message' : "ERROR: you are not an authorized SAE"}
@@ -132,7 +133,7 @@ async def getQKDMs():
 async def registerSAE(): 
 
     roles = g.oidc_token_info['realm_access']['roles']
-    auth_ID = g.oidc_token_info['name']
+    auth_ID = g.oidc_token_info['username']
 
     if not any(r in roles for r in ['sae', 'admin']): 
         value =  {'message' : "ERROR: you are not an authorized SAE or ADMIN"}
@@ -162,7 +163,7 @@ async def registerSAE():
 async def unregisterSAE(SAE_ID): 
 
     roles = g.oidc_token_info['realm_access']['roles']
-    auth_ID = g.oidc_token_info['name']
+    auth_ID = g.oidc_token_info['username']
 
     if not any(r in roles for r in ['sae', 'admin']): 
         value =  {'message' : "ERROR: you are not an authorized SAE or ADMIN"}
@@ -251,38 +252,12 @@ async def registerQKS():
         return value, 400
 
 
-@app.route(prefix+"/qks/<qks_ID>/streams", methods=['DELETE'])
-@oidc.accept_token(True)
-async def deleteIndirectStream(qks_ID) :
-
-    roles = g.oidc_token_info['realm_access']['roles']
-    if 'admin' not in roles: 
-        value =  {'message' : "ERROR: you are not an authorized ADMIN"}
-        return value, 401
-
-    try: 
-        qks_ID = str(qks_ID)
-        param = int(request.args.get('force', 0, int))
-        force_mode = True if param == 1 else False 
-        status, value = await api.deleteIndirectStream(qks_ID, force_mode)
-        if status: 
-            app.logger.info(f"deleteIndirectStream: completed for stream to qks {qks_ID}")
-            return value, 200
-        else: 
-            app.logger.warning(f"deleteIndirectStream: error for stream to qks {qks_ID} - message = {value['message']}")
-            return value, 503
-    except Exception as e:
-        app.logger.error(f"deleteIndirectStream EXCEPTION: {e}")
-        value = {'message' : "error: invalid content"}
-        return value, 400
-
-
 # SOUTHBOUND INTERFACE 
 @app.route(prefix+"/qkdms", methods=['POST'])
 @oidc.accept_token(True)
 async def registerQKDM(): 
 
-    auth_ID = g.oidc_token_info['name']
+    auth_ID = g.oidc_token_info['username']
     roles = g.oidc_token_info['realm_access']['roles']
     if 'qkdm' not in roles: 
         value =  {'message' : "ERROR: you are not an authorized QKDM"}
@@ -321,7 +296,7 @@ async def registerQKDM():
 async def unregisterQKDM(qkdm_ID): 
 
     roles = g.oidc_token_info['realm_access']['roles']
-    auth_ID = g.oidc_token_info['name']
+    auth_ID = g.oidc_token_info['username']
 
     if not any(r in roles for r in ['qkdm', 'admin']): 
         value =  {'message' : "ERROR: you are not an authorized QKDM or ADMIN"}
@@ -383,7 +358,7 @@ async def forwardData():
             app.logger.warning(f"forwardData: error for destination_sae = {destination_sae} - message = {value['message']}")
             return value, 503 
     except Exception as e: 
-        app.logger.error(f"forwardData EXCEPTION: {e}")
+        app.logger.error(f"forwardData EXCEPTION: {traceback.format_exc()}")
         value = {'message' : "error: invalid content"}
         return value, 400
 
@@ -393,17 +368,14 @@ async def createStream():
     try:
         source_qks_ID = str(content['source_qks_ID'])
         key_stream_ID = str(content['key_stream_ID'])
-        stream_type = str(content['type'])
         qkdm_id = str(content['qkdm_id']) if 'qkdm_id' in content else None
-        master_key_id = str(content['master_key_ID']) if 'master_key_ID' in content else None
-        destination_sae = str(content['destination_sae']) if 'destination_sae' in content else None
 
-        status, value = await api.createStream(source_qks_ID, key_stream_ID, stream_type, qkdm_id, master_key_id, destination_sae)
+        status, value = await api.createStream(source_qks_ID, key_stream_ID, qkdm_id)
         if status: 
-            app.logger.info(f"createStream: completed for key_stream_ID = {key_stream_ID}, type = {stream_type}")
+            app.logger.info(f"createStream: completed for key_stream_ID = {key_stream_ID}")
             return value, 200
         else: 
-            app.logger.warning(f"createStream: error for key_stream_ID = {key_stream_ID}, type = {stream_type} - message = {value['message']}")
+            app.logger.warning(f"createStream: error for key_stream_ID = {key_stream_ID} - message = {value['message']}")
             return value, 503
     except Exception as e:
         app.logger.error(f"createStream EXCEPTION: {e}")
@@ -430,44 +402,26 @@ async def closeStream(key_stream_ID):
         value = {'message' : "error: invalid content"}
         return value, 400
 
-@app.route(prefix+"/streams/<key_stream_ID>/exchange", methods=['POST'])
-async def exchangeIndirectKey(key_stream_ID) : 
-    key_stream_ID = str(key_stream_ID)
-    content = await request.get_json() 
-    try:
-        iv = str(content['iv'])
-        number = int(content['number'])
-        enc_keys = list(content['enc_keys'])
-        ids = list(content['ids'])
-        status, value = await api.exchangeIndirectKey(key_stream_ID, iv, number, enc_keys, ids)
-        
-        if status: 
-            app.logger.info(f"exchangeIndirectKey: exchanged for key_stream_ID = {key_stream_ID}, ids = {ids}")
-            return value, 200
-        else: 
-            app.logger.warning(f"exchangeIndirectKey: error for key_stream_ID = {key_stream_ID}, message = {status['message']}")
-            return value, 503
-
-    except Exception as e: 
-        app.logger.error(f"exchangeIndirectKey EXCEPTION: {e}")
-        value = {'message' : "error: invalid content"}
-        return value, 400
-
+@app.route("/test", methods=['POST'])
+@oidc.accept_token(True)
+async def test(): 
+    app.logger.warning(f"test EXECUTED")
+    res = g.oidc_token_info
+    return res, 200
+    
 
 async def main() : 
-    global app, serverPort, oidc
+    global app, serverPort
 
     # check db and vault init 
     if len(sys.argv) == 2:
-        status, serverPort, keycloack_issuer = await api.init_server(sys.argv[1])
+        status, serverPort = await api.init_server(sys.argv[1])
     else: 
-        status, serverPort, keycloack_issuer = await api.init_server()
+        status, serverPort = await api.init_server()
     if not status: 
         app.logger.error(f"ERROR: unable to init DB or Vault")
         return  
 
-    app.config.update({'OIDC_VALID_ISSUERS': [keycloack_issuer]})
-    oidc = OpenIDConnect(app)
     app.run(host='0.0.0.0', port=serverPort, loop = asyncio.get_event_loop())
 
 

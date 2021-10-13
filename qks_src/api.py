@@ -24,7 +24,6 @@ http_client : aiohttp.ClientSession = None
 async def getStatus(slave_SAE_ID : str, master_SAE_ID : str) -> tuple[bool, dict] : 
     global mongo_client, http_client, redis_client, vault_client
     key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
-    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
     master_sae_rt = await redis_client.hgetall(master_SAE_ID) 
     if not master_sae_rt or master_sae_rt['dest'] != config['qks']['id']: 
@@ -39,6 +38,10 @@ async def getStatus(slave_SAE_ID : str, master_SAE_ID : str) -> tuple[bool, dict
 
     if sae_rt['dest'] == config['qks']['id']: 
         status = {"message" : f"ERROR: {slave_SAE_ID} registered on this host"}
+        return (False, status)
+
+    if sae_rt['cost'] == -1 : 
+        status = {"message" : f"ERROR: {slave_SAE_ID} currently unreachable. There are not available paths"}
         return (False, status)
     
     
@@ -80,46 +83,16 @@ async def getStatus(slave_SAE_ID : str, master_SAE_ID : str) -> tuple[bool, dict
 
         return (True, res )
     else: 
-        # no stream available. Try to open an indirect connection
-        key_stream_ID = str(uuid4())
-        master_key_ID = str(uuid4())
-        post_data = {
-            'source_qks_ID' : config['qks']['id'],
-            'type' : "indirect",
-            'key_stream_ID' : key_stream_ID, 
-            'master_key_ID' : master_key_ID,
-            'destination_sae' : master_SAE_ID
-        }
-
-        # call createStream on the peer qks 
-        dest_qks = await qks_collection.find_one({"_id" : sae_rt['dest']})
-        dest_qks_ip = dest_qks['address']['ip']
-        dest_qks_port = int(dest_qks['address']['port']) 
-        async with http_client.post(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/streams", json=post_data) as response:
-            if response.status != 200 :
-                status = {"message" : "ERROR: peer QKS unable to create the stream",
-                    "details" : (await response.json())}
-                return (False, status)
-
-        in_qks = {"id" :  dest_qks['_id'], "address" : dest_qks['address']}
-        key_stream = {"_id" : key_stream_ID, 
-        "dest_qks" : in_qks, 
-        "standard_key_size" : config['qks']['indirect_key_size'], 
-        "max_key_count" : config['qks']['indirect_max_key_count'],
-        "reserved_keys" : [], 
-        "indirect_data" : {"master_key_id" : master_key_ID, "available_keys" : -1}
-        }
-
-        await key_stream_collection.insert_one(key_stream)
-
-        res['key_size'] = key_stream['standard_key_size']
-        res['max_key_count'] = key_stream['max_key_count']
-        res['stored_key_count'] = key_stream['indirect_data']['available_keys']
+        # no stream available but SAE reachable -> hop-by-hop connection 
+        res['key_size'] = None
+        res['max_key_count'] = None
+        res['stored_key_count'] = None
         return (True, res)
  
 async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_size : int = None, extensions = None ) -> tuple[bool, dict] :
     global mongo_client, http_client, redis_client, vault_client
     key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
+    qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
 
     if key_size is None: 
         key_size = config['qks']['def_key_size'] 
@@ -132,7 +105,7 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
         return (False, status) 
 
 
-    master_sae_rt = await redis_client.hgetall(master_SAE_ID) #me = await qks_collection.find_one({"_id" : config['qks']['id']})
+    master_sae_rt = await redis_client.hgetall(master_SAE_ID) 
     if not master_sae_rt or master_sae_rt['dest'] != config['qks']['id']: 
         status = {"message" : "master_SAE_ID not registered on this host"}
         return (False, status)
@@ -149,8 +122,8 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
 
     slave_sae_rt = await redis_client.hgetall(slave_SAE_ID)
 
-    if not slave_sae_rt : 
-        status = {"message" : "ERROR: slave_SAE_ID not found on this network! "}
+    if not slave_sae_rt or slave_sae_rt["cost"] == -1: 
+        status = {"message" : "ERROR: slave_SAE_ID not found on this network or currently unreachable! "}
         return (False, status) 
 
     qkdm_exists = False 
@@ -161,21 +134,15 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
         status = {"message" : "ERROR: there are not direct connection to this SAE. Try asking for an indirect one ! "}
         return (False, status) 
    
-    key_stream = await key_stream_collection.find_one({"dest_qks.id" : slave_sae_rt['dest'], "qkdm" : {"$exists" : qkdm_exists}}) 
+    key_stream = await key_stream_collection.find_one({"dest_qks.id" : slave_sae_rt['dest']}) 
 
-    if key_stream is None:
-        status = {"message" : "ERROR: there are no streams to reach requeted SAE", 
-                    "details" : "indirect connection not implemented yet. Call getStatus before getKey to avoid this error"}
-        return (False, status)
-            
+    if key_stream is not None:
+        # check available keys and save their ids inside stream.reserved_keys collection 
+        needed_keys = number
+        list_to_be_sent = []
+        used_AKIDs = []
 
-    # check available keys and save their ids inside stream.reserved_keys collection 
-    needed_keys = number
-    list_to_be_sent = []
-    used_AKIDs = []
-
-    chunks_for_each_key = int(ceil(float(key_size) / key_stream['standard_key_size'])  ) 
-    if 'qkdm' in key_stream:  
+        chunks_for_each_key = int(ceil(float(key_size) / key_stream['standard_key_size'])  ) 
         direct_communication = True 
         address = key_stream['qkdm']['address']
         
@@ -188,46 +155,131 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
                 status =  {"message" : "ERROR: qkdm unable to answer correctly "} 
                 return (False, status )
 
-    else: 
-        # indirect stream 
-        direct_communication = False
-        status, kids = await sendIndirectKey(key_stream, needed_keys*chunks_for_each_key)
 
-        if not status : 
-            status =  {"message" : "ERROR: unable to perform indirect exchange"} 
+        # RELAXED APPROACH : IF THERE ARE NOT ENOUGH AVAILABLE KEYS RETURN WHAT IS AVAILABLE
+        av_AKIDs = int(len(kids) / chunks_for_each_key)
+        start = 0
+        for i in range(0, av_AKIDs): 
+            AKID = str(uuid4() )
+            AKID_kids = kids[start:(start + chunks_for_each_key)]
+            start += chunks_for_each_key 
+            # save reserved_keys_for_this_stream in the DB stream collection (reservedKeys)
+            # we suppose that generated uuid are unique, no need to check their uniqueness
+            element  = {'AKID' : AKID, 'sae' : slave_SAE_ID, 'kids' : AKID_kids}  
+            query =  {"_id" : key_stream['_id'], "reserved_keys" : {
+                "$not" : {
+                    "$elemMatch" :  {"kids" : {"$in" : AKID_kids}}
+                }        
+            }}
+
+            update = {"$push" : {"reserved_keys" : element}}
+            res = await key_stream_collection.update_one(query, update)
+            if res.modified_count == 1: 
+                    needed_keys -= 1
+                    list_to_be_sent.append({'AKID' : AKID, 'kids' : AKID_kids})
+                    used_AKIDs.append(AKID)
+            
+            if needed_keys == 0: 
+                break 
+
+        if len(list_to_be_sent) < 1 : 
+            status =  {"message" : "ERROR: unable to reserve any key"} 
             return (False, status )
 
+    else: # multi-hop connection 
+        direct_communication = False 
+        key_stream = await key_stream_collection.find_one({"_id" : "indirect"}) 
+        ## generate key and forward id 
 
-    # RELAXED APPROACH : IF THERE ARE NOT ENOUGH AVAILABLE KEYS RETURN WHAT IS AVAILABLE
-    av_AKIDs = int(len(kids) / chunks_for_each_key)
-    start = 0
-    for i in range(0, av_AKIDs): 
-        AKID = str(uuid4() )
-        AKID_kids = kids[start:(start + chunks_for_each_key)]
-        start += chunks_for_each_key 
-        # save reserved_keys_for_this_stream in the DB stream collection (reservedKeys)
-        # we suppose that generated uuid are unique, no need to check their uniqueness
-        element  = {'AKID' : AKID, 'sae' : slave_SAE_ID, 'kids' : AKID_kids}  
-        query =  {"_id" : key_stream['_id'], "reserved_keys" : {
-            "$not" : {
-                "$elemMatch" :  {"kids" : {"$in" : AKID_kids}}
-            }        
-        }}
+        next_hop = slave_sae_rt['next'] 
+        forward_stream = await key_stream_collection.find_one({"dest_qks.id" : next_hop, "qkdm" : {"$exists" : True}}) 
+        if forward_stream is None: 
+            status = {'message' : f"Multi-hop exchange ERROR: unable to forward, there isn't an available stream to the next hop {next_hop}! "}
+            return False, status
 
-        update = {"$push" : {"reserved_keys" : element}}
-        res = await key_stream_collection.update_one(query, update)
-        if res.modified_count == 1: 
-                needed_keys -= 1
-                list_to_be_sent.append({'AKID' : AKID, 'kids' : AKID_kids})
-                used_AKIDs.append(AKID)
-        
-        if needed_keys == 0: 
-            break 
 
-    if len(list_to_be_sent) < 1 : 
-        status =  {"message" : "ERROR: unable to reserve any key"} 
-        return (False, status )
+        key_chunks = int(ceil(float(AES.key_size[2]*8) / forward_stream['standard_key_size'] )  ) 
 
+        address = forward_stream['qkdm']['address']
+        async with http_client.get(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/get_id/{forward_stream['_id']}?count=-1") as ret: 
+            ret_val = await ret.json()
+            ret_status = ret_val['status']
+            if ret.status == 200 and ret_status == 0: 
+                kids = ret_val['available_indexes'] 
+            else:
+                status =  {"message" : "ERROR: qkdm unable to answer correctly "} 
+                return (False, status )
+
+        av_AKIDs = int(len(kids) / key_chunks)
+
+        start = 0
+        element_to_send = None
+        for i in range(0, av_AKIDs): 
+            AKID = str(uuid4() )
+            AKID_kids = kids[start:(start + key_chunks)]
+            start += key_chunks 
+            element  = {'AKID' : AKID, 'sae' : f"QKS_{next_hop}", 'kids' : AKID_kids}  
+            query =  {"_id" : forward_stream['_id'], "reserved_keys" : {
+                "$not" : {
+                    "$elemMatch" :  {"kids" : {"$in" : AKID_kids}}
+                }        
+            }}
+
+            update = {"$push" : {"reserved_keys" : element}}
+            res = await key_stream_collection.update_one(query, update)
+            if res.modified_count == 1: 
+                element_to_send = {'AKID' : AKID, 'kids' : AKID_kids}
+                break 
+
+        if element_to_send is None: 
+            status =  {"message" : "ERROR: unable to forward due to lack of keys  "} 
+            return (False, status )
+
+        post_data = {
+            "key_stream_ID" : forward_stream['_id'],
+            "slave_SAE_ID" : f"QKS_{next_hop}", 
+            "key_size" : AES.key_size[2]*8,
+            "key_ID_list" : [element_to_send]
+        }
+
+        dest_qks_ip = forward_stream['dest_qks']['address']['ip']
+        dest_qks_port = int(forward_stream['dest_qks']['address']['port'])
+        async with http_client.post(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/keys/QKS_{config['qks']['id']}/reserve", json=post_data) as response:
+            if response.status != 200: 
+                status = {"message" : "ERROR: peer qks unable to reserve keys", 
+                "peer_message" : (await response.json())}
+                await key_stream_collection.update_one({"_id" : forward_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : AKID}}})
+                return (False, status)
+
+        forwarding_key = await requireSingleKey(forward_stream, element_to_send, AES.key_size[2]*8)
+        forward_byte_key = b64decode(forwarding_key['key'])
+
+        list_to_be_sent = []
+        keys_to_be_returned = []
+        forward_byte_iv = get_random_bytes(AES.key_size[2])
+        encypher = AES.new(forward_byte_key, AES.MODE_GCM, forward_byte_iv)
+        byte_data_to_forward = int.to_bytes(key_size, 2, byteorder='big')
+        for i in range(0, number): 
+            retr_key = get_random_bytes(key_size//8)
+            retr_key_id = str(uuid4())
+            byte_data_to_forward += retr_key_id.encode() + retr_key
+            list_to_be_sent.append({'AKID' : retr_key_id})
+            keys_to_be_returned.append({'key_ID' : retr_key_id, 'key' : b64encode(retr_key).decode()})
+        encrypted_data_to_forward = encypher.encrypt(pad(byte_data_to_forward, AES.block_size)) 
+
+        post_data = {
+            'data' : b64encode(encrypted_data_to_forward).decode(),
+            'decryption_key_ID' : AKID, 
+            'decryption_stream_ID' : forward_stream['_id'], 
+            'iv' : b64encode(forward_byte_iv).decode(),
+            'destination_sae' : slave_SAE_ID 
+        }
+
+        async with http_client.post(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/forward", json=post_data) as response:
+            if response.status != 200: 
+                status = {"message" : "ERROR: error in forward chain", 
+                "peer_message" : (await response.json())}
+                return (False, status) 
 
     # send reserveKey(list_to_be_sent) requests to the peer qks
     post_data = {
@@ -236,29 +288,34 @@ async def getKey(slave_SAE_ID: str , master_SAE_ID : str, number : int =1, key_s
         "key_size" : key_size,
         "key_ID_list" : list_to_be_sent
     }
-    dest_qks_ip = key_stream['dest_qks']['address']['ip']
-    dest_qks_port = int(key_stream['dest_qks']['address']['port'])
+
+    if key_stream['_id'] == 'indirect' : 
+        dest_qks = await qks_collection.find_one({"_id" : slave_sae_rt['dest']})
+        dest_qks_ip = dest_qks['address']['ip']
+        dest_qks_port = int(dest_qks['address']['port'])
+    else: 
+        dest_qks_ip = key_stream['dest_qks']['address']['ip']
+        dest_qks_port = int(key_stream['dest_qks']['address']['port'])
+
     async with http_client.post(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/keys/{master_SAE_ID}/reserve", json=post_data) as response:
         if response.status != 200: 
             status = {"message" : "ERROR: peer qks unable to reserve keys", 
-            "peer_message" : str(await response.text())}
-            await key_stream_collection.update_one({"_id" : key_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : {"$in" : used_AKIDs}}}})
+            "peer_message" : (await response.json())}
+            if 'qkdm' in key_stream: 
+                await key_stream_collection.update_one({"_id" : key_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : {"$in" : used_AKIDs}}}})
             return (False, status)
 
     res = {'keys' : [], 'key_container_extension' : {'direct_communication' : direct_communication, 'returned_keys' : len(list_to_be_sent)}}
-    tasks = [] 
-    for element in list_to_be_sent: 
-        tasks.append(asyncio.create_task(requireSingleKey(key_stream, element, key_size)))
-        
-    res['keys'] = await asyncio.gather(*tasks)
-    update_query = {"$pull" : {"reserved_keys" : {"AKID" : {"$in" : used_AKIDs}}}}
-    if 'qkdm' not in key_stream: 
-        update_query["$inc"] = {"indirect_data.available_keys" : -(chunks_for_each_key*len(res['keys']))}
-    await key_stream_collection.update_one({"_id" : key_stream['_id']}, update_query)
+    if key_stream['_id'] == 'indirect' : 
+        res['keys'] = keys_to_be_returned   
+    else: 
+        tasks = []
+        for element in list_to_be_sent: 
+            tasks.append(asyncio.create_task(requireSingleKey(key_stream, element, key_size)))  
+        res['keys'] = await asyncio.gather(*tasks)
     return (True, res)
         
 async def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str) -> tuple[bool, dict] :
-    # REDIS saves 1 over 3 db query  
     global mongo_client, config, http_client, redis_client, vault_client
     stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
 
@@ -273,7 +330,6 @@ async def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str) -
         return (False, status)   
 
     # get all streams that have a reserved_key matching one of the requested one
-    
     query = {"reserved_keys" : {"$elemMatch" : {"sae" : master_SAE_ID, "AKID" : {"$in" : key_IDs}}}}
     cursor = stream_collection.find(query)
     matching_streams = await cursor.to_list(length=len(key_IDs)) #mactching streams can't be more than requested keys 
@@ -289,7 +345,7 @@ async def getKeyWithKeyIDs(master_SAE_ID: str, key_IDs:list, slave_SAE_ID:str) -
         for key in key_stream['reserved_keys']:
             if key['AKID'] in key_IDs and key['sae'] == master_SAE_ID:
                 # for each requested AKID require all its chunks and build the aggregate key
-                tasks.append(asyncio.create_task(requireSingleKey(key_stream, key, key['key_size'], update=True)))
+                tasks.append(asyncio.create_task(requireSingleKey(key_stream, key, key['key_size'])))
     
     keys_to_be_returned['keys'] = await asyncio.gather(*tasks)
     return (True, keys_to_be_returned)
@@ -370,7 +426,6 @@ async def startQKDMStream(qkdm_ID:str) -> tuple[bool, dict] :
     post_data = {
         'qkdm_id' : qkdm['reachable_qkdm'],
         'source_qks_ID' : config['qks']['id'],
-        'type' : "direct",
         'key_stream_ID' : key_stream_ID
     }
 
@@ -422,7 +477,7 @@ async def deleteQKDMStreams(qkdm_ID:str) -> tuple[bool, dict] :
     async with http_client.delete(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/streams/{key_stream_ID}", json=delete_data) as response:
         if response.status != 200 :
             status = {"message" : "ERROR: peer QKS unable to close the stream", 
-            "peer_message" : (await response.text)}
+            "peer_message" : (await response.json())}
             return (False, status)
     
     address = key_stream['qkdm']['address']
@@ -460,43 +515,6 @@ async def registerQKS(qks_id:str, qks_ip:str, qks_port:int, routing_ip:str, rout
         value = {"message" : "QKS successfully registered on this network. Its information will be progragated after a qkdm link is established"} 
         await redis_client.publish(f"{config['redis']['topic']}-qks", f"add-{qks_id}_{routing_ip}_{routing_port}")
         return (True, value)
-
-async def deleteIndirectStream(destination_qks_id: str, force_mode:bool = False ) -> tuple[bool, dict] : 
-    global mongo_client, config, http_client, redis_client, vault_client
-    key_stream_collection = mongo_client[config['mongo_db']['db']]['key_streams'] 
-    
-    key_stream = await key_stream_collection.find_one({"dest_qks.id" : destination_qks_id, "indirect_data" : {"$exists" : True}})
-    if key_stream is None: 
-        status = {"message" : "There are no active indirect stream to this qks"}
-        return (False, status)
-
-    if not force_mode: 
-        direct_key_stream = await key_stream_collection.find_one({"dest_qks.id" : destination_qks_id, "qkdm" : {"$exists" : True}})
-        if direct_key_stream is None: 
-            status = {"message" : "There isn't a direct stream to this destination: closing this stream can cause errors!", 
-                    "details" : "call this API in force mode if you really want to delete this stream"}
-            return (False, status)
-    
-    key_stream_ID = key_stream["_id"]    
-    delete_data = {
-        'source_qks_ID' : config['qks']['id'],
-        'key_stream_ID' : key_stream_ID
-    }
-
-    # call closeStream on the peer qks 
-    dest_qks_ip = key_stream['dest_qks']['address']['ip']
-    dest_qks_port = int(key_stream['dest_qks']['address']['port'])
-    async with http_client.delete(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/streams/{key_stream_ID}", json=delete_data) as response:
-        if response.status != 200 :
-            status = {"message" : "ERROR: peer QKS unable to close the stream", 
-            "peer_message" : (await response.text())}
-            return (False, status)
-        else: 
-            await key_stream_collection.delete_one({"_id" : key_stream_ID})
-            await vault_client.remove(config['qks']['id'], str(key_stream['indirect_data']['master_key_id']))
-            await vault_client.remove(config['qks']['id'], key_stream_ID)
-            status = {"message" : f"OK: indirect stream {key_stream_ID} closed successfully"}
-            return (True, status)
 
 # SOUTHBOUND 
 async def registerQKDM(qkdm_ID:str, protocol:str, qkdm_ip:str, qkdm_port:int, reachable_qkdm: str, reachable_qks:str, max_key_count:int, key_size:int) -> tuple[bool, dict]: 
@@ -608,29 +626,29 @@ async def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, ke
         status = {"message" : "ERROR: invalid key_stream_ID"}
         return (False, status) 
 
-    valid_list = True
-    kids_to_be_checked = set()
-    akids = set()
-    for element in key_ID_list: 
-        if not('AKID' in element and 'kids' in element and type(element['kids']) is list) or (key_stream['standard_key_size']*len(element['kids']) < key_size): 
-            valid_list = False
-            break
-        else: 
-            element['sae'] = master_SAE_ID
-            element['key_size'] = key_size 
-            kids_to_be_checked.update(list(element['kids']))
-            akids.add(element['AKID'])
+    if 'qkdm' in key_stream: # direct
+        valid_list = True
+        kids_to_be_checked = set()
+        akids = set()
+        for element in key_ID_list: 
+            if not('AKID' in element and 'kids' in element and type(element['kids']) is list) or (key_stream['standard_key_size']*len(element['kids']) < key_size): 
+                valid_list = False
+                break
+            else: 
+                element['sae'] = master_SAE_ID
+                element['key_size'] = key_size 
+                kids_to_be_checked.update(list(element['kids']))
+                akids.add(element['AKID'])
 
-    if not valid_list: 
-        status = {"message" : "ERROR: key_ID_list not properly formatted"}
-        return (False, status)
-    
-    kids_per_akid = int(ceil(float(key_size) / key_stream['standard_key_size'])  ) 
-    if (len(akids) != len(key_ID_list)) or len(kids_to_be_checked)!= len(akids)*kids_per_akid : 
-        status = {"message" : "ERROR: there are some duplication in AKIDs or kids received"}
-        return (False, status) 
+        if not valid_list: 
+            status = {"message" : "ERROR: key_ID_list not properly formatted"}
+            return (False, status)
+        
+        kids_per_akid = int(ceil(float(key_size) / key_stream['standard_key_size'])  ) 
+        if (len(akids) != len(key_ID_list)) or len(kids_to_be_checked)!= len(akids)*kids_per_akid : 
+            status = {"message" : "ERROR: there are some duplication in AKIDs or kids received"}
+            return (False, status) 
 
-    if 'qkdm' in key_stream:
         address = key_stream['qkdm']['address']
         post_data = {'key_stream_ID' : key_stream_ID, 'indexes' : list(kids_to_be_checked)} 
         async with http_client.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/check_id", json=post_data) as ret: 
@@ -639,21 +657,32 @@ async def reserveKeys(master_SAE_ID:str, slave_SAE_ID:str, key_stream_ID:str, ke
             if ret.status!=200 or ret_status != 0:
                 status = {"message" : "ERROR: some kids are not available! "}
                 return (False, status)  
+        
+        query =  {"_id" : key_stream_ID, "reserved_keys" : {
+            "$not" : {
+                "$elemMatch" :  {"$or" : [
+                    {"AKID" : {"$in" : list(akids)}}, 
+                    {"kids" : {"$in" : list(kids_to_be_checked)}}]
+                }
+            } }}
+
     else: # indirect 
-        ret = await vault_client.check(f"{config['qks']['id']}/{key_stream['_id']}", list(kids_to_be_checked))
+        akids = [key['AKID'] for key in key_ID_list]
+        ret = await vault_client.check(f"{config['qks']['id']}/{key_stream['_id']}", akids)
         if not ret:
+            print(f"RESERVE PATH {config['qks']['id']}/{key_stream['_id']}")
             status = {"message" : "ERROR: some kids are not available! "}
             return (False, status)   
 
+        for kid in key_ID_list: 
+            kid['sae'] = master_SAE_ID
+            kid['key_size'] = key_size 
 
-    query =  {"_id" : key_stream_ID, "reserved_keys" : {
-        "$not" : {
-            "$elemMatch" :  {"$or" : [
-                {"AKID" : {"$in" : list(akids)}}, 
-                {"kids" : {"$in" : list(kids_to_be_checked)}}]
-            }
-        } 
-    }}
+        query =  {"_id" : key_stream_ID, "reserved_keys" : {
+            "$not" : {
+                "$elemMatch" :  {"AKID" : {"$in" : list(akids)}}, 
+            }} }
+
  
     update = {"$push" : {"reserved_keys" : {"$each" : key_ID_list}}}
     res = await key_stream_collection.update_one(query, update)
@@ -704,11 +733,21 @@ async def forwardData(data:str, decryption_key_id:str, decryption_key_stream_id:
     byte_data_to_forward = unpad(decypher.decrypt(decoded_data), AES.block_size) # byte data
 
     if destination_QKS == config['qks']['id']: 
-        # save key into vault and into reserved keys 
-        key_id = byte_data_to_forward[:36].decode()
-        key = byte_data_to_forward[36:]
-        key_enc = b64encode(key).decode()
-        await vault_client.writeOrUpdate(config['qks']['id'], str(key_id), {str(key_id) : key_enc}) #this key will be used to decrypt the master key when opening an indirect stream 
+        size = int.from_bytes(byte_data_to_forward[:2], byteorder='big')
+        byte_size = size // 8
+        number = (len(byte_data_to_forward)-2) // (36+byte_size)
+        res = await key_stream_collection.update_one({"_id" : "indirect",  "available_keys" : { "$lte" : (config['qks']['indirect_max_key_count'] - number) }}, {"$inc" : {"available_keys" : number}})
+        if res.modified_count != 1: 
+            return False, {'message' : f'ERROR: not enough space available to save the received keys'}
+        start = 2
+        # save keys into vault 
+        while start < len(byte_data_to_forward):
+            key_id = byte_data_to_forward[start:start+36].decode()
+            key = byte_data_to_forward[start+36:start+36+byte_size]
+            key_enc = b64encode(key).decode()
+            res = await vault_client.writeOrUpdate(f"{config['qks']['id']}/indirect", str(key_id), {str(key_id) : key_enc}) 
+            start += 36 + byte_size
+        print(f"FORWARD PATH {config['qks']['id']}/indirect")
         return True, {'message' : 'key saved successfully'}
     
     else : # -> forward to next hop  
@@ -767,7 +806,7 @@ async def forwardData(data:str, decryption_key_id:str, decryption_key_stream_id:
         async with http_client.post(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/keys/QKS_{config['qks']['id']}/reserve", json=post_data) as response:
             if response.status != 200: 
                 status = {"message" : "ERROR: peer qks unable to reserve keys", 
-                "peer_message" : str(await response.text())}
+                "peer_message" : (await response.json())}
                 await key_stream_collection.update_one({"_id" : forward_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : AKID}}})
                 return (False, status)
 
@@ -804,14 +843,14 @@ async def forwardData(data:str, decryption_key_id:str, decryption_key_stream_id:
         async with http_client.post(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/forward", json=post_data) as response:
             if response.status != 200: 
                 status = {"message" : "ERROR: error in forward chain", 
-                "peer_message" : str(await response.text())}
+                "peer_message" : (await response.json())}
                 return (False, status) 
             else: 
                 status = {"message" : "OK: forwarding chain completed"} 
                 return (True, status )
      
 
-async def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qkdm_id:str=None, master_key_id:str=None, destination_sae:str=None ) -> tuple[bool, dict]:
+async def createStream(source_qks_ID:str, key_stream_ID:str, qkdm_id:str) -> tuple[bool, dict]:
     global mongo_client, config, http_client, vault_client
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
     stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
@@ -822,151 +861,30 @@ async def createStream(source_qks_ID:str, key_stream_ID:str, stream_type:str, qk
         value = {'message' : "ERROR: invalid qks_ID or stream_ID"}
         return (False, value)
     
-    if stream_type == "indirect":
-        sae_rt = await redis_client.hgetall(destination_sae)
-        if not sae_rt: # unknown destination sae  -> None or {}
-            status = {'message' : "ERROR: UNKNOWN destination SAE"}
-            return False, status
 
-        next_hop = sae_rt['next'] 
-
-        forward_stream = await stream_collection.find_one({"dest_qks.id" : next_hop, "qkdm" : {"$exists" : True}}) 
-        if forward_stream is None: 
-            status = {'message' : f"ERROR: unable to forward, there isn't an available stream to the next hop {next_hop}! "}
-            return False, status
-        
-        
-        key_chunks = int(ceil(float(AES.key_size[2]*8) / forward_stream['standard_key_size'] )  ) 
-
-        address = forward_stream['qkdm']['address']
-        async with http_client.get(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/get_id/{forward_stream['_id']}?count=-1") as ret: 
+    selected_qkdm = await qkdm_collection.find_one({"_id" : qkdm_id})
+    if  selected_qkdm is not None: 
+        address = selected_qkdm['address']  
+        post_data = {'key_stream_ID' : key_stream_ID, 'source' : source_qks_ID, 'destination' : config['qks']['id']} 
+        async with http_client.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/open_connect", json=post_data) as ret: 
             ret_val = await ret.json()
             ret_status = ret_val['status']
-            if ret.status == 200 and ret_status == 0: 
-                kids = ret_val['available_indexes'] 
-            else:
-                status =  {"message" : "ERROR: qkdm unable to answer correctly "} 
-                return (False, status )
-
-        av_AKIDs = int(len(kids) / key_chunks)
-        
-        start = 0
-        element_to_send = None
-        for i in range(0, av_AKIDs): 
-            AKID = str(uuid4() )
-            AKID_kids = kids[start:(start + key_chunks)]
-            start += key_chunks 
-            element  = {'AKID' : AKID, 'sae' : f"QKS_{next_hop}", 'kids' : AKID_kids}  
-            query =  {"_id" : forward_stream['_id'], "reserved_keys" : {
-                "$not" : {
-                    "$elemMatch" :  {"kids" : {"$in" : AKID_kids}}
-                }        
-            }}
-
-            update = {"$push" : {"reserved_keys" : element}}
-            res = await stream_collection.update_one(query, update)
-            if res.modified_count == 1: 
-                element_to_send = [{'AKID' : AKID, 'kids' : AKID_kids}]
-                break 
-
-        if element_to_send is None: 
-            status =  {"message" : "ERROR: unable to forward due to lack of keys  "} 
-            return (False, status )
-
-        post_data = {
-            "key_stream_ID" : forward_stream['_id'],
-            "slave_SAE_ID" : f"QKS_{next_hop}", 
-            "key_size" : AES.key_size[2]*8,
-            "key_ID_list" : element_to_send
-        }
-
-        dest_qks_ip = forward_stream['dest_qks']['address']['ip']
-        dest_qks_port = int(forward_stream['dest_qks']['address']['port'])
-        async with http_client.post(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/keys/QKS_{config['qks']['id']}/reserve", json=post_data) as response:
-            if response.status != 200: 
-                status = {"message" : "ERROR: peer qks unable to reserve keys", 
-                "peer_message" : str(await response.json())}
-                await stream_collection.update_one({"_id" : forward_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : AKID}}})
-                return (False, status)
-
-        qkdm_address = forward_stream['qkdm']['address']
-        post_data = {'key_stream_ID' : forward_stream['_id'], 'indexes' : AKID_kids}
-        async with http_client.post(f"http://{qkdm_address['ip']}:{qkdm_address['port']}/api/v1/qkdm/actions/get_key", json=post_data) as ret: 
-            ret_val = await ret.json()
-            ret_status_code = ret.status
-
-        ret_status = ret_val['status']
-        if ret_status != 0 or ret_status_code != 200: 
-            status = {"message" : "ABORT : THIS SHOULD NOT HAPPEN! there is someone else which is not this QKS that is using the QKDM!"}
-            return (False, status)
-        chunks : list[str]= ret_val['keys']
-        
-        forward_byte_key = b''
-        for el in chunks :
-            forward_byte_key += b64decode(el.encode()) 
-        await stream_collection.update_one({"_id" : forward_stream['_id']}, {"$pull" : {"reserved_keys" : {"AKID" : AKID}}})
-        
-        forward_byte_iv = get_random_bytes(AES.key_size[2])
-        encypher = AES.new(forward_byte_key, AES.MODE_GCM, forward_byte_iv)
-        master_key = get_random_bytes(config['qks']['indirect_key_size']//8)
-        byte_data_to_forward = master_key_id.encode() + master_key
-        encrypted_data_to_forward = encypher.encrypt(pad(byte_data_to_forward, AES.block_size)) 
-
-        post_data = {
-            'data' : b64encode(encrypted_data_to_forward).decode(),
-            'decryption_key_ID' : AKID, 
-            'decryption_stream_ID' : forward_stream['_id'], 
-            'iv' : b64encode(forward_byte_iv).decode(),
-            'destination_sae' : destination_sae 
-        }
-
-        async with http_client.post(f"http://{dest_qks_ip}:{dest_qks_port}/api/v1/forward", json=post_data) as response:
-            if response.status != 200: 
-                status = {"message" : "ERROR: error in forward chain", 
-                "peer_message" : str(await response.text())}
-                return (False, status) 
-        
-        in_qks = {"id" :  source_qks['_id'], "address" : source_qks['address']}
-        new_stream = {
-            "_id" : key_stream_ID, 
-            "dest_qks" : in_qks, 
-            "standard_key_size" : config['qks']['indirect_key_size'], 
-            "max_key_count" : config['qks']['indirect_max_key_count'],
-            "reserved_keys" : [], 
-            "indirect_data" : {"master_key_id" : master_key_id, "available_keys" : -1}
-        }
-        await stream_collection.insert_one(new_stream)
-        key_enc = b64encode(master_key).decode()
-        await vault_client.writeOrUpdate(config['qks']['id'], str(master_key_id), {str(master_key_id) : key_enc})
-        value = {'message' : "stream successfully created"}
-        return (True, value)
-        
-
-    elif stream_type == "direct" and qkdm_id:
-
-        selected_qkdm = await qkdm_collection.find_one({"_id" : qkdm_id})
-        if  selected_qkdm is not None: 
-            address = selected_qkdm['address']  
-            post_data = {'key_stream_ID' : key_stream_ID, 'source' : source_qks_ID, 'destination' : config['qks']['id']} 
-            async with http_client.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/open_connect", json=post_data) as ret: 
-                ret_val = await ret.json()
-                ret_status = ret_val['status']
-                if ret_status == 0 and ret.status == 200: 
-                    in_qkdm = {"id" : selected_qkdm['_id'], "address" : selected_qkdm['address']}
-                    dest_qks = {"id" : source_qks_ID, "address" : source_qks['address']}
-                    new_stream = {"_id" : key_stream_ID, "dest_qks" : dest_qks, "reserved_keys" : [], "qkdm" : in_qkdm, "standard_key_size" : selected_qkdm['parameters']['standard_key_size'], "max_key_count" : selected_qkdm['parameters']['max_key_count']}
-                    await stream_collection.insert_one(new_stream)
-                    await qks_collection.update_one({"_id" : config['qks']['id']}, { "$addToSet": { "neighbor_qks": dest_qks["id"]  }})
-                    await qks_collection.update_one({"_id" : dest_qks["id"]}, { "$addToSet": { "neighbor_qks": config['qks']['id']  }})
-                    await redis_client.publish(f"{config['redis']['topic']}-link", f"add-{source_qks_ID}")
-                    value = {'message' : "stream successfully created"}
-                    return (True, value)
-                else: 
-                    value = {'message' : "ERROR in stream creation"}
-                    return (False, value)
+            if ret_status == 0 and ret.status == 200: 
+                in_qkdm = {"id" : selected_qkdm['_id'], "address" : selected_qkdm['address']}
+                dest_qks = {"id" : source_qks_ID, "address" : source_qks['address']}
+                new_stream = {"_id" : key_stream_ID, "dest_qks" : dest_qks, "reserved_keys" : [], "qkdm" : in_qkdm, "standard_key_size" : selected_qkdm['parameters']['standard_key_size'], "max_key_count" : selected_qkdm['parameters']['max_key_count']}
+                await stream_collection.insert_one(new_stream)
+                await qks_collection.update_one({"_id" : config['qks']['id']}, { "$addToSet": { "neighbor_qks": dest_qks["id"]  }})
+                await qks_collection.update_one({"_id" : dest_qks["id"]}, { "$addToSet": { "neighbor_qks": config['qks']['id']  }})
+                await redis_client.publish(f"{config['redis']['topic']}-link", f"add-{source_qks_ID}")
+                value = {'message' : "stream successfully created"}
+                return (True, value)
+            else: 
+                value = {'message' : "ERROR in stream creation"}
+                return (False, value)
 
     else: 
-        value = {'message' : "ERROR: invalid stream type or qkdm_id"}
+        value = {'message' : "ERROR: invalid qkdm_id"}
         return (False, value)
 
 async def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]:
@@ -975,69 +893,26 @@ async def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]
     qks_collection = mongo_client[config['mongo_db']['db']]['quantum_key_servers']
     
     key_stream =  await stream_collection.find_one({"_id" : key_stream_ID, "dest_qks.id" : source_qks_ID}) 
-    if key_stream is None:
+    if key_stream is None or 'qkdm' not in key_stream:
         value = {'message' : "ERROR: invalid qks_ID or stream_ID"}
         return (False, value)
     
-    if 'qkdm' in key_stream : 
-        address = key_stream['qkdm']['address']  
-        post_data = {'key_stream_ID' : key_stream_ID} 
-        async with http_client.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/close", json=post_data) as ret:
-            ret_val = await ret.json()
-            ret_status = ret_val['status']
-            if ret_status == 0 and ret.status == 200: 
-                await stream_collection.delete_one({"_id" : key_stream_ID})
-                await qks_collection.update_one({ "_id": config['qks']['id'] }, { "$pull": { "neighbor_qks": key_stream['dest_qks']['id']  }})
-                await qks_collection.update_one({ "_id": key_stream['dest_qks']['id']  }, { "$pull": { "neighbor_qks": config['qks']['id'] }})
-                await redis_client.publish(f"{config['redis']['topic']}-link", f"remove-{source_qks_ID}")
-                value = {'message' : "direct stream successfully closed"}
-                return (True, value)
-            else: 
-                value = {'message' : "ERROR in stream closure"}
-                return (False, value)
-    else: 
-        master_key_id = key_stream['indirect_data']['master_key_id']
-        await vault_client.remove(config['qks']['id'], master_key_id)
-        await vault_client.remove(config['qks']['id'], key_stream_ID) # delete everything under that stream_id 
-        await stream_collection.delete_one({"_id" : key_stream_ID})
-        
-        value = {'message' : "indirect stream successfully closed"}
-        return (True, value) 
 
-
-async def exchangeIndirectKey(key_stream_ID : str, iv_b64 : str, number : int , enc_keys_b64 : list, ids : list) -> tuple[bool, dict] :  
-    global vault_client, http_client, config, mongo_client
-    stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
-
-    iv = b64decode(iv_b64)
-    key_stream = await stream_collection.find_one({"_id" : key_stream_ID}) 
-
-    if number != len(enc_keys_b64) or number != len(ids): 
-        status = {"message" : "ERROR: length mismatch "}
-        return False, status
-
-    if key_stream is None: 
-        status = {"message" : "ERROR: unknown key stream "}
-        return False, status 
-
-
-    master_key_data = await vault_client.read(f"{config['qks']['id']}", key_stream['indirect_data']['master_key_id'] )
-    master_key = b64decode(master_key_data[key_stream['indirect_data']['master_key_id']])
-    decypher = AES.new(master_key, AES.MODE_GCM, iv) 
-
-    tasks = [] 
-    for enc_key_b64, id in zip(enc_keys_b64, ids): 
-        enc_key = b64decode(enc_key_b64)
-        key = unpad(decypher.decrypt(enc_key), AES.block_size)
-        key_b64 = b64encode(key).decode() 
-        data = {id : key_b64}
-        tasks.append(asyncio.create_task(vault_client.writeOrUpdate(f"{config['qks']['id']}/{key_stream['_id']}", id, data)  ))
- 
-
-    res = await asyncio.gather(*tasks)
-    await stream_collection.update_one({"_id" : key_stream_ID}, {"$inc" : {"indirect_data.available_keys" : number}})
-    status = {"message" : "keys saved successfully"}
-    return True, status 
+    address = key_stream['qkdm']['address']  
+    post_data = {'key_stream_ID' : key_stream_ID} 
+    async with http_client.post(f"http://{address['ip']}:{address['port']}/api/v1/qkdm/actions/close", json=post_data) as ret:
+        ret_val = await ret.json()
+        ret_status = ret_val['status']
+        if ret_status == 0 and ret.status == 200: 
+            await stream_collection.delete_one({"_id" : key_stream_ID})
+            await qks_collection.update_one({ "_id": config['qks']['id'] }, { "$pull": { "neighbor_qks": key_stream['dest_qks']['id']  }})
+            await qks_collection.update_one({ "_id": key_stream['dest_qks']['id']  }, { "$pull": { "neighbor_qks": config['qks']['id'] }})
+            await redis_client.publish(f"{config['redis']['topic']}-link", f"remove-{source_qks_ID}")
+            value = {'message' : "direct stream successfully closed"}
+            return (True, value)
+        else: 
+            value = {'message' : "ERROR in stream closure"}
+            return (False, value)
 
 
 # MANAGEMENT FUNCTIONS
@@ -1054,9 +929,17 @@ async def init_server(config_file_name = "qks_src/config_files/config.yaml") -> 
     try: 
         await test_mongo_client.list_database_names()
         mongo_client = MongoClient(f"mongodb://{config['mongo_db']['user']}:{config['mongo_db']['password']}@{config['mongo_db']['host']}:{config['mongo_db']['port']}/{config['mongo_db']['db']}?authSource={config['mongo_db']['auth_src']}")
+    
+        stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
+        indirect_key_stream = {"_id" : "indirect", "reserved_keys" : [] , "available_keys" : 0}
+        res  = await stream_collection.update_one({"_id" : "indirect"}, {"$setOnInsert" : indirect_key_stream}, upsert=True)
+        
+
     except Exception as e:  
         print("mongodb exception:", e)
         return (False, 0) 
+
+    
 
     # check that the qks can access vault  
     try: 
@@ -1082,50 +965,12 @@ async def init_server(config_file_name = "qks_src/config_files/config.yaml") -> 
 
 
     http_client = aiohttp.ClientSession()
-    keycloack_issuer = f"http://{config['keycloak']['address']}:{config['keycloak']['port']}/auth/realm/{config['keycloak']['realm']}"
-    return (True, config['qks']['port'], keycloack_issuer)
+    return (True, config['qks']['port'])
 
-async def sendIndirectKey(key_stream_obj : dict, number : int) -> tuple[bool, list] : 
-    global vault_client, http_client, config, mongo_client
-    stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
-    
-    iv = get_random_bytes(AES.key_size[2])
-    iv_b64 = b64encode(iv).decode()
-    master_key_data = await vault_client.read(f"{config['qks']['id']}", key_stream_obj['indirect_data']['master_key_id'] )
-    master_key = b64decode(master_key_data[key_stream_obj['indirect_data']['master_key_id']])
-    encypher = AES.new(master_key, AES.MODE_GCM, iv)
- 
-    
-    keys_to_enc = [ get_random_bytes(key_stream_obj['standard_key_size']//8) for el in range(0, number)]
-    enc_keys = [ encypher.encrypt(pad(k, AES.block_size)) for k in keys_to_enc ] 
-    key_ids = [str(uuid4()) for el in range(0,number)] 
-    enc_keys_b64 = [b64encode(k).decode() for k in enc_keys]
-    
-    post_data = {
-        'iv' : iv_b64,
-        'number' : number,
-        'enc_keys' : enc_keys_b64,
-        'ids' : key_ids
-    }
-
-    address = key_stream_obj['dest_qks']['address']
-    async with http_client.post(f"http://{address['ip']}:{address['port']}/api/v1/streams/{key_stream_obj['_id']}/exchange", json=post_data) as ret: 
-        ret_val = await ret.json()
-        if ret.status != 200 :  
-            return False, []
-    
-    for key, id in zip(keys_to_enc, key_ids): 
-        b64_key = b64encode(key).decode() 
-        data = {id : b64_key}
-        res = await  vault_client.writeOrUpdate(f"{config['qks']['id']}/{key_stream_obj['_id']}", id, data)    
-
-    await stream_collection.update_one({"_id" : key_stream_obj['_id']}, {"$inc" : {"indirect_data.available_keys" : number}})
-    return True, key_ids
-
-
-async def requireSingleKey(key_stream: dict, key: dict, key_size: int, update: bool = False ) -> dict:
+async def requireSingleKey(key_stream: dict, key: dict, size: int) -> dict:
     stream_collection = mongo_client[config['mongo_db']['db']]['key_streams']
     chunks = []
+    
     if 'qkdm' in key_stream: 
         address = key_stream['qkdm']['address']
         post_data = {'key_stream_ID' : key_stream["_id"], 'indexes' : key['kids']}
@@ -1137,30 +982,19 @@ async def requireSingleKey(key_stream: dict, key: dict, key_size: int, update: b
             return None
         chunks = ret_val['keys']
 
+        byte_key = b''
+        for el in chunks :
+            byte_key += b64decode(el.encode()) 
+        aggregate_key = b64encode(byte_key[0:(size//8)]).decode()
+
     else: 
-        tasks = [] 
-        for kid in key['kids']: 
-            tasks.append(asyncio.create_task(vault_client.readAndRemove(f"{config['qks']['id']}/{key_stream['_id']}", kid)))
-        rets = await asyncio.gather(*tasks)
-        
-        for c, kid in zip(rets, key['kids']): 
-            if c is not None: 
-                chunks.append(c[kid])
-            else:  
-                return None  
+        ret = await vault_client.readAndRemove(f"{config['qks']['id']}/{key_stream['_id']}", key['AKID'])
+        aggregate_key = ret[key['AKID']] #data in vault are already encoded, indirect keys does not require aggregation
 
 
-    # if a key is not available in the module or in vault it won't be returned but the other keys will be returned correctly
-    byte_key = b''
-    for el in chunks :
-        byte_key += b64decode(el.encode()) 
-    aggregate_key = b64encode(byte_key[0:(key_size//8)]).decode()
-
-    if update: # remove akid from reserved keys
-        update_query = {"$pull" : {"reserved_keys" : {"AKID" : key['AKID']}}}
-        if 'qkdm' not in key_stream: 
-            update_query["$inc"] = {"indirect_data.available_keys" : -len(chunks)}
-        await stream_collection.update_one({"_id" : key_stream['_id']}, update_query)
-
+    update_query = {"$pull" : {"reserved_keys" : {"AKID" : key['AKID']}}}
+    if 'qkdm' not in key_stream: 
+            update_query["$inc"] = {"available_keys" : -1}
+    await stream_collection.update_one({"_id" : key_stream['_id']}, update_query)
     
     return {'key_ID' : key['AKID'], 'key' : aggregate_key}
