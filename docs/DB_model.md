@@ -66,6 +66,7 @@
 	}, 
 	"standard_key_size" : "Integer",
 	"max_key_count" : "Integer", 
+	"available_keys" : "Integer",
 	"reserved_keys" : 
 		[
 			{ 
@@ -82,10 +83,6 @@
       		"ip" : "String", 
       		"port" : "Integer"
     	}
-	},
-	"indirect_data" : {
-		"master_key_id" : "String",
-		"available_keys" : "Integer"
 	}
 	
 }

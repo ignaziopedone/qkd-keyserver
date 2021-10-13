@@ -81,30 +81,18 @@ participant "Alice's QKS" as AQKS order 2 #LightBlue
 participant "Bob's QKS" as BQKS order 4 #LightBlue
 participant "Carol's QKS" as CQKS order 3 #lightskyblue
 
-== a) Indirect key stream creation == 
+== a) Key request == 
 autonumber 1.1
-ASAE -[#blue]> AQKS ++ #LightBlue: getStatus (bobSAE)
-note right: bobSAE non directly connected \n keyStream not found 
-AQKS -[#blue]> BQKS ++ #lightblue : createStream ( src, KSID, type, master_KID) 
+ASAE -[#blue]> AQKS ++ #LightBlue: getKey \n(slave_SAE_ID, size, count) 
 
 group forwarding
-BQKS -[#blue]> CQKS ++ #lightskyblue: forwardData \n (enc_data, next_hop, dest, KID) 
-CQKS -[#blue]> AQKS ++ #lightblue: forwardData \n (enc_data, next_hop, dest, KID) 
+AQKS -[#blue]> CQKS ++ #lightskyblue: forwardData \n (enc_data, next_hop, dest, KID) 
+CQKS -[#blue]> BQKS ++ #lightblue: forwardData \n (enc_data, next_hop, dest, KID) 
 note right: enc_data encrypted with \n a QKD derived key 
-AQKS -[#blue]-> CQKS --: < OK >
-CQKS -[#blue]-> BQKS --: < OK >
+BQKS -[#blue]-> CQKS --: < OK >
+CQKS -[#blue]-> AQKS --: < OK >
 end
 
-BQKS -[#blue]-> AQKS --: < ACK > 
-AQKS -[#blue]-> ASAE --: < status info >
-
-
-== b) Key request == 
-autonumber inc A
-ASAE -[#blue]> AQKS ++ #LightBlue: getKey \n(slave_SAE_ID, size, count) 
-AQKS -[#blue]> BQKS ++ #LightBlue: exchangeIndirectKey (KSID, KIDs, enc_keys) 
-note left: enc_keys encrypted with \n the master key
-BQKS -[#blue]-> AQKS --: < ACK >
 AQKS -[#blue]> BQKS ++ #LightBlue:  reserveKeys \n( master_SAE_ID, slave_SAE_ID, size, {AKID, KIDs} )
 BQKS -[#blue]-> AQKS --: < ACK >
 AQKS -[#blue]-> ASAE -- : < AKID, key >
@@ -113,4 +101,5 @@ BSAE -[#blue]> BQKS ++ #LightBlue: getKeyWithIDs \n(master_SAE_ID, AKID)
 BQKS -[#blue]-> BSAE --: < AKID, key >
 
 @enduml
+
 
