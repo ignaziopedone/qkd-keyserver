@@ -112,7 +112,8 @@ async def sendSocket (ptype : str , ptime : float) :
                     'source' : {'ID' : me, 'address' : config['qks']['ip'], 'port' :  config['qks']['port']},
                     'routing' : {'address' : config['routing']['ip'], 'port' :  config['routing']['port']}, 
                     'timestamp' : ptime,
-                    'type' : ptype 
+                    'type' : ptype,
+                    'auth' : ""
                     }
                 if ptype == 'S': 
                     ids = graph.get_node(me).get_saes()
