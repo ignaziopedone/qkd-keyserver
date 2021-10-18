@@ -259,15 +259,16 @@ async def registerQKDM():
 
     auth_ID = g.oidc_token_info['username']
     roles = g.oidc_token_info['realm_access']['roles']
-    if 'qkdm' not in roles: 
-        value =  {'message' : "ERROR: you are not an authorized QKDM"}
+    
+    if not any(r in roles for r in ['qkdm', 'admin']): 
+        value =  {'message' : "ERROR: you are not an authorized QKDM or ADMIN"}
         return value, 401
+
 
     content = await request.get_json()
 
     QKDM_ID = str(content['QKDM_ID']) if 'QKDM_ID' in content else None
-
-    if auth_ID != QKDM_ID : 
+    if QKDM_ID is None or ('qkdm' in roles and auth_ID != QKDM_ID):
         value = {'message' : "ERROR: unauthorized, you can register only yourself!"}
         return value, 403
 
@@ -304,7 +305,7 @@ async def unregisterQKDM(qkdm_ID):
 
     qkdm_ID = str(qkdm_ID)
     if ('qkdm' in roles and auth_ID != qkdm_ID) : 
-        value = {'message' : "ERROR: unauthorized, you can register only yourself!"}
+        value = {'message' : "ERROR: unauthorized, you can unregister only yourself!"}
         return value, 403
 
     status, value = await api.unregisterQKDM(qkdm_ID) 
