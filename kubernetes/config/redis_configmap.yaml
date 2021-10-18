@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-configmap
+data:
+  redis-config: |
+    user default off 
+    user root allcommands allkeys >password on 

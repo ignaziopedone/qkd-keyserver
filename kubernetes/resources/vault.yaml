@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault-deployment
+  labels:
+    app: vault
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault
+  template:
+    metadata:
+      labels:
+        app: vault
+    spec:
+      containers:
+      - name: vault
+        image: vault
+        ports:
+        - containerPort: 8200
+        command:
+          ["vault", "server", "-config=/vault-conf/vault_config.json"]
+        volumeMounts:
+        - mountPath: /vault-conf
+          name: config
+    volumes: 
+      - name: config 
+        configMap: 
+          name: vault-configmap
+          items: 
+          - key: vault-config
+            path: vault_config.json
+
+  
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault-service
+spec:
+  selector:
+    app: vault
+  ports:
+    - protocol: TCP
+      port: 8200
+      targetPort: 8200
