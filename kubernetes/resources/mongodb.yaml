@@ -1,7 +1,7 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
-  name: mongodb-deployment
+  name: mongodb-statefulset
   labels:
     app: mongodb
 spec:
@@ -32,6 +32,19 @@ spec:
               key: mongo-root-password
         - name: MONGO_INITDB_DATABASE 
           value: admin
+        volumeMounts:
+          - name: mongodb-persistent-storage-claim
+            mountPath: /data/db
+  volumeClaimTemplates:
+  - metadata:
+      name: mongodb-persistent-storage-claim
+      annotations:
+        volume.beta.kubernetes.io/storage-class: "standard"
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
 
 ---
 

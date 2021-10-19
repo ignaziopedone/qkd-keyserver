@@ -1,7 +1,7 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
-  name: vault-deployment
+  name: vault-statefulset
   labels:
     app: vault
 spec:
@@ -22,8 +22,10 @@ spec:
         command:
           ["vault", "server", "-config=/vault-conf/vault_config.json"]
         volumeMounts:
-        - mountPath: /vault-conf
-          name: config
+        - name: config
+          mountPath: /vault-conf
+        - name: vault-persistent-storage-claim
+          mountPath: /vault/file
     volumes: 
       - name: config 
         configMap: 
@@ -31,6 +33,16 @@ spec:
           items: 
           - key: vault-config
             path: vault_config.json
+  volumeClaimTemplates:
+  - metadata:
+      name: vault-persistent-storage-claim
+      annotations:
+        volume.beta.kubernetes.io/storage-class: "standard"
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
 
   
 

@@ -46,5 +46,5 @@ spec:
     - protocol: TCP
       port: 7000
       targetPort: 7000
-      nodePort: 31000
+      nodePort: 30500
 

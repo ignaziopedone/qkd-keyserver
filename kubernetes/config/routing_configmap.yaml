@@ -17,7 +17,7 @@ data:
       port: 30000 # data for routing : node port!
     routing: 
       timer : 20
-      port : 31000 # data for routing : node address!
+      port : 30500 # data for routing : node address!
       ip: 172.18.0.161 # data for routing : node port!
     redis: 
       user: root

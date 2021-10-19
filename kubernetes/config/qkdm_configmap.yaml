@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qkdm-configmap
+data:
+  qkdm-config: |
+    keycloak:
+      address: keycloak-service
+      client_id: qks
+      client_secret: 29db8d09-97f1-4e5c-8744-9e07bd4ff65a # TO BE UPDATED! 
+      password: password
+      port: 8080
+      realm: qks
+      username: qkdm1
+    mongo_db:
+      auth_src: admin
+      db: qkdm1
+      host: mongodb-service
+      password: 2375baf10b17478b94d3ac3863c5aca1 # TO BE UPDATED! 
+      port: 27017
+      user: qkdm1
+    qkd_device:
+      host: 172.18.0.102 # OTHER CLUSTER ADDRESS! 
+      port: 31500 # OTHER CLUSTER NODEPORT! 
+      role: receiver
+    qkdm:
+      dest_ID: qkdm2
+      dest_IP: 172.18.0.102 # OTHER CLUSTER ADDRESS! 
+      dest_port: 31000 # OTHER CLUSTER NODEPORT! 
+      id: qkdm1
+      init: true
+      ip: qkdm-service
+      key_size: 128
+      max_key_count: 100
+      port: 5000
+      protocol: fake
+    qks:
+      dest_id: qks2
+      src_id: qks1
+      src_ip: qks-service
+      src_port: 4000
+    vault:
+      host: vault-service
+      port: 8200
+      secret_engine: qkdm1
+      token: s.UWtQMYfzOAmdb5c7lP0K7igS # TO BE UPDATED! 
+
