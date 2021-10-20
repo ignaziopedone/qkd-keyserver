@@ -34,7 +34,7 @@ async def verifyToken(header: dict) -> tuple[bool, str, list] :
         app.logger.info(f"Verify Token: Null - {header}")
         return False, None, None 
 
-    async with http_client.get(f"http://{keycloak_data['address']}:{keycloak_data['port']}/auth/realms/qks/protocol/openid-connect/userinfo", header=header) as ret: 
+    async with http_client.get(f"http://{keycloak_data['address']}:{keycloak_data['port']}/auth/realms/qks/protocol/openid-connect/userinfo", header={'Authorization' : header}) as ret: 
         ret_val = await ret.json()
         app.logger.info(f"Verify Token: {ret_val}")
         if 'preferred_username' in ret_val and 'realm_access' in ret_val and 'roles' in ret_val['realm_access']: 
