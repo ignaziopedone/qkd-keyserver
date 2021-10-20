@@ -22,13 +22,13 @@ spec:
         volumeMounts:
         - mountPath: /usr/app/qkd-keyserver/routing/config_files
           name: config
-    volumes: 
-      - name: config 
-        configMap: 
-          name: routing-configmap
-          items: 
-          - key: routing-config
-            path: config.yaml
+      volumes: 
+        - name: config 
+          configMap: 
+            name: routing-configmap
+            items: 
+            - key: routing-config
+              path: config.yaml
 
   
 

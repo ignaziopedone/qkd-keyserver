@@ -25,13 +25,13 @@ spec:
         volumeMounts:
         - mountPath: /redis-conf
           name: config
-    volumes: 
-      - name: config 
-        configMap: 
-          name: redis-configmap
-          items: 
-          - key: redis-config
-            path: redis.conf
+      volumes: 
+        - name: config 
+          configMap: 
+            name: redis-configmap
+            items: 
+            - key: redis-config
+              path: redis.conf
 
   
 

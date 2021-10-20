@@ -1,35 +1,35 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: qks-deployment
+  name: qkdm-deployment
   labels:
-    app: qks
+    app: qkdm
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: qks
+      app: qkdm
   template:
     metadata:
       labels:
-        app: qks
+        app: qkdm
     spec:
       containers:
-      - name: qks
-        image: ignaziopedone/qkd:qkdm_2
+      - name: qkdm
+        image: ignaziopedone/qkd:qkdm-2.0
         ports:
         - containerPort: 5000
         - containerPort: 6000
         volumeMounts:
         - mountPath: /usr/app/qkd-module/received_config_files
           name: config
-    volumes: 
-      - name: config 
-        configMap: 
-          name: qkdm-configmap
-          items: 
-          - key: qkdm-config
-            path: config.yaml
+      volumes: 
+        - name: config 
+          configMap: 
+            name: qkdm-configmap
+            items: 
+            - key: qkdm-config
+              path: config.yaml
 
 ---
 

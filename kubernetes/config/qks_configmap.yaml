@@ -23,8 +23,13 @@ data:
     vault: 
       host : vault-service 
       port : 8200
-      token : s.IvlbsITnckYx3RRxBDC24iLS    # TO BE UPDATED
-      key64 : TjPNkjfDN1hwM6K7kXupVaTLkx6RMXu1crwWGMJucUM=  # TO BE UPDATED
+      token : s.6uCzLV3fgNp5tyBRLMdaV6z7    # TO BE UPDATED
+      key64 : 
+        - 9/KYmfdPbCwPX2OdnF7mt4jKXZ/RV9UazZlny4S2E5SG
+        - iJpsgNrIBc/ZjNRAAWAZ0gUcvJBnKMMWBBapAnYPQqge
+        - bVJupFLEwJtGA+0o46YdPwoUZQYnzntiKoGLTZghakHP
+        - WmKHZdUynBoqjf6KaUGQexEPS12mcvbYIGK27kvNJJCV
+        - XaHRDswaaRunn+oYsuYqru2wFLbXvPadcZydsLftgj8g
     redis: 
       user: root
       password: password 

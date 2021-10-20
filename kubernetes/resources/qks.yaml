@@ -16,19 +16,19 @@ spec:
     spec:
       containers:
       - name: qks
-        image: ignaziopedone/qkd:qks_2
+        image: ignaziopedone/qkd:qks-2.0
         ports:
         - containerPort: 4000
         volumeMounts:
         - mountPath: /usr/app/qkd-keyserver/qks_src/config_files
           name: config
-    volumes: 
-      - name: config 
-        configMap: 
-          name: qks-configmap
-          items: 
-          - key: qks-config
-            path: config.yaml
+      volumes: 
+        - name: config 
+          configMap: 
+            name: qks-configmap
+            items: 
+            - key: qks-config
+              path: config.yaml
 
   
 
