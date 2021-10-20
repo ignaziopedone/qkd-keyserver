@@ -30,10 +30,7 @@ oidc = OpenIDConnect()
 oidc.init_app(app)
 
 async def verifyToken(header: dict) -> tuple[bool, str, list] : 
-    if header is None or 'Authorization' not in header: 
-        app.logger.info(f"Verify Token: Null - {header}")
-        return False, None, None 
-
+    
     async with http_client.get(f"http://{keycloak_data['address']}:{keycloak_data['port']}/auth/realms/qks/protocol/openid-connect/userinfo", header={'Authorization' : header}) as ret: 
         ret_val = await ret.json()
         app.logger.info(f"Verify Token: {ret_val}")
