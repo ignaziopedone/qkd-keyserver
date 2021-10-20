@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: qks
-        image: ignaziopedone/qkd:qks-2.0
+        image: qks:async #ignaziopedone/qkd:qks-2.0
         ports:
         - containerPort: 4000
         volumeMounts:

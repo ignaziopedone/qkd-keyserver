@@ -6,12 +6,15 @@ import sys
 import logging 
 from flask_oidc import OpenIDConnect
 import traceback
+import aiohttp
 
 nest_asyncio.apply()
 app = Quart(__name__)
 serverPort = 4000
 prefix = "/api/v1"
 logging.basicConfig(filename='qks.log', filemode='w', level=logging.INFO)
+http_client : aiohttp.ClientSession = None
+keycloak_data = {}
 
 app.config.update({
     'SECRET_KEY': 'SomethingNotEntirelySecret',
@@ -25,6 +28,21 @@ app.config.update({
 
 oidc = OpenIDConnect()
 oidc.init_app(app)
+
+async def verifyToken(header: dict) -> tuple[bool, str, list] : 
+    if header is None or 'Authorization' not in header: 
+        return False, None, None 
+
+    async with http_client.get(f"http://{keycloak_data['address']}:{keycloak_data['port']}/auth/realms/qks/protocol/openid-connect/userinfo", header=header) as ret: 
+        ret_val = await ret.json()
+        if 'preferred_username' in ret_val and 'realm_access' in ret_val and 'roles' in ret_val['realm_access']: 
+            username  = ret_val['preferred_username'] 
+            roles = ret_val['realm_access']['roles']
+            return True, username, roles 
+        else: 
+            return False, None, None
+        
+
 
 # NORTHBOUND INTERFACE 
 @app.route(prefix+"/keys/<slave_SAE_ID>/status", methods=['GET'])
@@ -404,23 +422,30 @@ async def closeStream(key_stream_ID):
         return value, 400
 
 @app.route("/test", methods=['POST'])
-@oidc.accept_token(True)
 async def test(): 
     app.logger.warning(f"test EXECUTED")
-    res = g.oidc_token_info
-    return res, 200
+    header = request.headers.get('Authorization')
+    res, username, roles = await verifyToken(header)
+    
+    if res: 
+        val = {'user' : username, 'roles' : roles}
+        return val, 200
+    else: 
+        return {"message": "Invalid Token"}, 401
     
 
 async def main() : 
-    global app, serverPort
+    global app, serverPort, http_client, keycloak_data
+
+    http_client = aiohttp.ClientSession()
 
     # check db and vault init 
     if len(sys.argv) == 2:
-        status, serverPort = await api.init_server(sys.argv[1])
+        status, serverPort, keycloak_data = await api.init_server(sys.argv[1])
     else: 
-        status, serverPort = await api.init_server()
+        status, serverPort, keycloak_data = await api.init_server()
     if not status: 
-        app.logger.error(f"ERROR: unable to init DB or Vault")
+        app.logger.error(f"ERROR: unable to init DB, Vault or Redis")
         return  
 
     app.run(host='0.0.0.0', port=serverPort, loop = asyncio.get_event_loop())
