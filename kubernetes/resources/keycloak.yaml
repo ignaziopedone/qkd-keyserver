@@ -32,6 +32,25 @@ spec:
               key: keycloak-password
         - name: DB_VENDOR 
           value: H2
+        - name: KEYCLOAK_IMPORT
+          value: /tmp/realm.json
+        - name: PROXY_ADDRESS_FORWARDING
+          value: 'true' 
+        - name: KEYCLOAK_FRONTEND_URL
+          value: http://keycloak-service:8080
+        volumeMounts:
+        - mountPath: /tmp
+          name: config
+      volumes: 
+        - name: config 
+          configMap: 
+            name: keycloak-configmap
+            items: 
+            - key: keycloak-config
+              path: realm.json
+
+  
+
 
 ---
 

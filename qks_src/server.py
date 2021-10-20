@@ -15,7 +15,7 @@ logging.basicConfig(filename='qks.log', filemode='w', level=logging.INFO)
 
 app.config.update({
     'SECRET_KEY': 'SomethingNotEntirelySecret',
-    'OIDC_CLIENT_SECRETS': './client_secrets.json',
+    'OIDC_CLIENT_SECRETS': './config_files/client_secrets.json',
     'OIDC_INTROSPECTION_AUTH_METHOD': 'client_secret_post',
     'OIDC_TOKEN_TYPE_HINT': 'access_token',
     'OIDC_OPENID_REALM': 'qks',

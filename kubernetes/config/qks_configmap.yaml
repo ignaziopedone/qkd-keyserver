@@ -41,3 +41,17 @@ data:
       realm: qks
       address: keycloak-service
       port : 8080
+  keycloak_config: | 
+    {
+    "web": {
+        "auth_uri": "http://keycloak-service:8080/auth/realms/qks/protocol/openid-connect/auth",
+        "client_id": "qks1",
+        "client_secret" : "4f0d1cd9-4dc8-46b9-9651-fdfe118f53f8",
+        "redirect_uris": [
+            "http://localhost:4000/oidc_callback"
+        ],
+        "userinfo_uri": "http://keycloak-service:8080/auth/realms/qks/protocol/openid-connect/userinfo",
+        "token_uri": "http://keycloak-service:8080/auth/realms/qks/protocol/openid-connect/token",
+        "token_introspection_uri": "http://keycloak-service:8080/auth/realms/qks/protocol/openid-connect/token/introspect"
+    }
+    }

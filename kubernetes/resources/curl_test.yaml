@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shell-deployment
+  labels:
+    app: shell
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shell
+  template: 
+    metadata: 
+      labels: 
+        app: shell
+    spec: 
+      containers:
+      - name: nginx
+        image: nginx
+
+

@@ -1,0 +1,56 @@
+# Get admin token 
+POST http://localhost:8080/auth/realms/master/protocol/openid-connect/token HTTP/1.1
+Content-Type: application/x-www-form-urlencoded
+
+client_id=admin-cli
+&grant_type=password
+&username=admin
+&password=password
+
+###
+# Create a new realm 
+POST http://keycloak:8080/ HTTP/1.1
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJIVVkzQ2ptMzRMYlY0bnlxWDBvdVB0RC0zdEc5YzhaWi1NUFVwemlUQWdRIn0.eyJleHAiOjE2MzQ0NjIyMDUsImlhdCI6MTYzNDQ2MjE0NSwianRpIjoiZDc0Mzg3NzEtMTgwYS00MzIxLWEwODYtZWZmMWU0MjZiMzc3IiwiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwL2F1dGgvcmVhbG1zL21hc3RlciIsInN1YiI6IjYzMGU4ZmRiLWY1NzYtNGVkZi1hMmUyLTU0ZDM3NmYyMTI2YiIsInR5cCI6IkJlYXJlciIsImF6cCI6ImFkbWluLWNsaSIsInNlc3Npb25fc3RhdGUiOiI1ODk3MzM1NS1lZThmLTQ5NTUtYWI3Yi00YjVkZThhMjc1MDYiLCJhY3IiOiIxIiwic2NvcGUiOiJlbWFpbCBwcm9maWxlIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJhZG1pbiJ9.tsn8HygYqHX2BAGmFxjm3-PxrEwHqDuzUuKlV0ia5_pNhw8Ry1u4jK8Am04_YKgRNDBR5VRn8aOs29ixGcP2k96VdgqU30xmlG7rs735ezk3RY4RCDCEvSMKeJs6XQlL3SoVPMQTE7BlaSVEkGCc17mRVqIukp6HOTK6z4L3TDhdHBTo1XRVpRTDKv_awZ2t4IKeQTS1s6Ub1oAes1gOan9RhxfFb5Gu6mXSu7fLktrJjhq6upPTx0s0r9G0vQSbIVBoaWQMGvDm4_HL3tzQK4ekeHZpl4IVonPA3KRdb6OGcSdQYTeipulm88cxS9TIhRT_3jqC6bw9_EXvSztKfQ
+Content-Type: application/json 
+
+{   "realm" : "qks" }
+
+###
+# Create new roles 
+## admin 
+POST  http://keycloak:8080/qks/roles 
+Authorization: Bearer 
+Content-Type: application/json 
+
+{ "name" : "admin"}
+
+###
+## sae 
+POST  http://keycloak:8080/qks/roles 
+Authorization: Bearer 
+Content-Type: application/json 
+
+{ "name" : "sae"}
+
+### 
+## qkdm 
+POST  http://keycloak:8080/qks/roles 
+Authorization: Bearer 
+Content-Type: application/json 
+
+{ "name" : "qkdm"}
+
+### 
+## create a new client  
+POST  http://keycloak:8080/qks/clients 
+Authorization: Bearer 
+Content-Type: application/json 
+
+{ 
+    "clientId" : "qkstest", 
+    "protocol" : "openid-connect", 
+    "standardFlowEnabled" : false, 
+    "directAccessGrantsEnabled" : true,
+    "serviceAccountsEnabled" : true, 
+    "enabled" : true 
+}
