@@ -942,11 +942,9 @@ async def init_server(config_file_name = "qks_src/config_files/config.yaml") -> 
     # check that the qks can access vault  
     try: 
         vault_client = VaultClient(config['vault']['host'], config['vault']['port'], config['vault']['token']) 
-        res = await vault_client.connect()
-        if res : 
-            await vault_client.createEngine(config['qks']['id'])
-        else: 
-            return (False, -1)
+        res = await vault_client.connect() 
+        await vault_client.createEngine(config['qks']['id'])
+
     except Exception as e: 
         print("vault exception:", e)
         return (False, -1, {})
