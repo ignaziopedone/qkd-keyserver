@@ -33,7 +33,6 @@ async def verifyToken(header: dict) -> tuple[bool, str, list] :
     
     async with http_client.post(f"http://{keycloak_data['address']}:{keycloak_data['port']}/auth/realms/qks/protocol/openid-connect/userinfo", headers={'Authorization' : header}) as ret: 
         ret_val = await ret.json()
-        app.logger.info(f"Verify Token: {ret_val}")
         if 'preferred_username' in ret_val and 'realm_access' in ret_val and 'roles' in ret_val['realm_access']: 
             username  = ret_val['preferred_username'] 
             roles = ret_val['realm_access']['roles']
@@ -42,17 +41,22 @@ async def verifyToken(header: dict) -> tuple[bool, str, list] :
             return False, None, None
         
 
-
 # NORTHBOUND INTERFACE 
 @app.route(prefix+"/keys/<slave_SAE_ID>/status", methods=['GET'])
-@oidc.accept_token(True)
+#@oidc.accept_token(True)
 async def getStatus(slave_SAE_ID):
-
-    roles = g.oidc_token_info['realm_access']['roles']
-    master_SAE_ID = g.oidc_token_info['username']
+    #roles = g.oidc_token_info['realm_access']['roles']
+    #master_SAE_ID = g.oidc_token_info['username']
      
+    header = request.headers.get('Authorization')
+    res, master_SAE_ID, roles = await verifyToken(header) 
+    if not res: 
+        value = {'message' : "ERROR: invalid Authorization header token"}
+        return value, 401
+
     if not any(r in roles for r in ['sae', 'admin']): 
         value =  {'message' : "ERROR: you are not an authorized SAE or ADMIN"}
+        app.logger.info(f"getStatus : rejected unauthorized user {master_SAE_ID}")
         return value, 401
 
     slave_SAE_ID = str(slave_SAE_ID)
@@ -72,14 +76,22 @@ async def getStatus(slave_SAE_ID):
 
 
 @app.route(prefix+"/keys/<slave_SAE_ID>/enc_keys", methods=['POST'])
-@oidc.accept_token(True)
+#@oidc.accept_token(True)
 async def getKey(slave_SAE_ID):
     
-    roles = g.oidc_token_info['realm_access']['roles']
-    master_SAE_ID = g.oidc_token_info['username']
+    #roles = g.oidc_token_info['realm_access']['roles']
+    #master_SAE_ID = g.oidc_token_info['username']
+
+    header = request.headers.get('Authorization')
+    res, master_SAE_ID, roles = await verifyToken(header) 
+
+    if not res: 
+        value = {'message' : "ERROR: invalid Authorization header token"}
+        return value, 401
 
     if 'sae' not in roles: 
         value =  {'message' : "ERROR: you are not an authorized SAE"}
+        app.logger.info(f"getKey : rejected unauthorized user {master_SAE_ID}")
         return value, 401
     
     slave_SAE_ID = str(slave_SAE_ID) 
@@ -102,12 +114,20 @@ async def getKey(slave_SAE_ID):
         return value, 400 
 
 @app.route(prefix+"/keys/<master_SAE_ID>/dec_keys", methods=['POST'])
-@oidc.accept_token(True)
+#@oidc.accept_token(True)
 async def getKeyWithKeyIDs(master_SAE_ID):
-    roles = g.oidc_token_info['realm_access']['roles']
-    slave_SAE_ID = g.oidc_token_info['username']
+    #roles = g.oidc_token_info['realm_access']['roles']
+    #slave_SAE_ID = g.oidc_token_info['username']
+
+    header = request.headers.get('Authorization')
+    res, slave_SAE_ID, roles = await verifyToken(header) 
+    
+    if not res: 
+        value = {'message' : "ERROR: invalid Authorization header token"}
+        return value, 401
 
     if 'sae' not in roles: 
+        app.logger.info(f"getKeyWithKeyIDs : rejected unauthorized user {slave_SAE_ID}")
         value =  {'message' : "ERROR: you are not an authorized SAE"}
         return value, 401
     
@@ -128,11 +148,19 @@ async def getKeyWithKeyIDs(master_SAE_ID):
         return value, 400 
 
 @app.route(prefix+"/qkdms", methods=['GET'])
-@oidc.accept_token(True)
+#@oidc.accept_token(True)
 async def getQKDMs(): 
 
-    roles = g.oidc_token_info['realm_access']['roles']
+    #roles = g.oidc_token_info['realm_access']['roles']
+    header = request.headers.get('Authorization')
+    res, username, roles = await verifyToken(header) 
+    
+    if not res: 
+        value = {'message' : "ERROR: invalid Authorization header token"}
+        return value, 401
+    
     if 'admin' not in roles: 
+        app.logger.info(f"getQKDMs : rejected unauthorized user {username}")
         value =  {'message' : "ERROR: you are not an authorized ADMIN"}
         return value, 401
 
@@ -146,13 +174,21 @@ async def getQKDMs():
         return value, 503
 
 @app.route(prefix+"/saes", methods=['POST'])
-@oidc.accept_token(True)
+#@oidc.accept_token(True)
 async def registerSAE(): 
 
-    roles = g.oidc_token_info['realm_access']['roles']
-    auth_ID = g.oidc_token_info['username']
+    #roles = g.oidc_token_info['realm_access']['roles']
+    #auth_ID = g.oidc_token_info['username']
+
+    header = request.headers.get('Authorization')
+    res, auth_ID, roles = await verifyToken(header) 
+    
+    if not res: 
+        value = {'message' : "ERROR: invalid Authorization header token"}
+        return value, 401
 
     if not any(r in roles for r in ['sae', 'admin']): 
+        app.logger.info(f"registerSAE : rejected unauthorized user {auth_ID}")
         value =  {'message' : "ERROR: you are not an authorized SAE or ADMIN"}
         return value, 401
 
@@ -176,17 +212,25 @@ async def registerSAE():
         return value, 400
 
 @app.route(prefix+"/saes/<SAE_ID>", methods=['DELETE'])
-@oidc.accept_token(True)
+#@oidc.accept_token(True)
 async def unregisterSAE(SAE_ID): 
 
-    roles = g.oidc_token_info['realm_access']['roles']
-    auth_ID = g.oidc_token_info['username']
+    #roles = g.oidc_token_info['realm_access']['roles']
+    #auth_ID = g.oidc_token_info['username']
+
+    header = request.headers.get('Authorization')
+    res, auth_ID, roles = await verifyToken(header) 
+    
+    if not res: 
+        value = {'message' : "ERROR: invalid Authorization header token"}
+        return value, 401
+
 
     if not any(r in roles for r in ['sae', 'admin']): 
+        app.logger.info(f"unregisterSAE : rejected unauthorized user {auth_ID}")
         value =  {'message' : "ERROR: you are not an authorized SAE or ADMIN"}
         return value, 401
 
-    content = await request.get_json()
     SAE_ID = str(SAE_ID)
     if ('sae' in roles and auth_ID != SAE_ID):
             value = {'message' : "ERROR: unauthorized, you can unregister only yourself!"}
@@ -202,11 +246,19 @@ async def unregisterSAE(SAE_ID):
 
 
 @app.route(prefix+"/qkdms/<qkdm_ID>/streams", methods=['POST'])
-@oidc.accept_token(True)
+#@oidc.accept_token(True)
 async def startQKDMStream(qkdm_ID) : 
 
-    roles = g.oidc_token_info['realm_access']['roles']
+    #roles = g.oidc_token_info['realm_access']['roles']
+    header = request.headers.get('Authorization')
+    res, auth_ID, roles = await verifyToken(header) 
+    
+    if not res: 
+        value = {'message' : "ERROR: invalid Authorization header token"}
+        return value, 401
+    
     if 'admin' not in roles: 
+        app.logger.info(f"startQKDMStream : rejected unauthorized user {auth_ID}")
         value =  {'message' : "ERROR: you are not an authorized ADMIN"}
         return value, 401
 
@@ -220,11 +272,19 @@ async def startQKDMStream(qkdm_ID) :
         return value, 503
 
 @app.route(prefix+"/qkdms/<qkdm_ID>/streams", methods=['DELETE'])
-@oidc.accept_token(True)
+#@oidc.accept_token(True)
 async def deleteQKDMStreams(qkdm_ID) : 
 
-    roles = g.oidc_token_info['realm_access']['roles']
-    if 'admin' not in roles: 
+    #roles = g.oidc_token_info['realm_access']['roles']
+    header = request.headers.get('Authorization')
+    res, auth_ID, roles = await verifyToken(header) 
+    
+    if not res: 
+        value = {'message' : "ERROR: invalid Authorization header token"}
+        return value, 401
+    
+    if 'admin' not in roles:
+        app.logger.info(f"deleteQKDMStreams : rejected unauthorized user {auth_ID}") 
         value =  {'message' : "ERROR: you are not an authorized ADMIN"}
         return value, 401
 
@@ -239,11 +299,19 @@ async def deleteQKDMStreams(qkdm_ID) :
     
 
 @app.route(prefix+"/qks", methods=['POST'])
-@oidc.accept_token(True)
+#@oidc.accept_token(True)
 async def registerQKS(): 
     
-    roles = g.oidc_token_info['realm_access']['roles']
-    if 'admin' not in roles: 
+    #roles = g.oidc_token_info['realm_access']['roles']
+    header = request.headers.get('Authorization')
+    res, auth_ID, roles = await verifyToken(header) 
+    
+    if not res: 
+        value = {'message' : "ERROR: invalid Authorization header token"}
+        return value, 401
+    
+    if 'admin' not in roles:
+        app.logger.info(f"deleteQKDMStreams : rejected unauthorized user {auth_ID}") 
         value =  {'message' : "ERROR: you are not an authorized ADMIN"}
         return value, 401
     
@@ -271,13 +339,21 @@ async def registerQKS():
 
 # SOUTHBOUND INTERFACE 
 @app.route(prefix+"/qkdms", methods=['POST'])
-@oidc.accept_token(True)
+#@oidc.accept_token(True)
 async def registerQKDM(): 
 
-    auth_ID = g.oidc_token_info['username']
-    roles = g.oidc_token_info['realm_access']['roles']
+    #auth_ID = g.oidc_token_info['username']
+    #roles = g.oidc_token_info['realm_access']['roles']
     
+    header = request.headers.get('Authorization')
+    res, auth_ID, roles = await verifyToken(header) 
+    
+    if not res: 
+        value = {'message' : "ERROR: invalid Authorization header token"}
+        return value, 401
+
     if not any(r in roles for r in ['qkdm', 'admin']): 
+        app.logger.info(f"registerQKDM : rejected unauthorized user {auth_ID}") 
         value =  {'message' : "ERROR: you are not an authorized QKDM or ADMIN"}
         return value, 401
 
@@ -311,12 +387,21 @@ async def registerQKDM():
         return value, 400
 
 @app.route(prefix+"/qkdms/<qkdm_ID>", methods=['DELETE'])
+#@oidc.accept_token(True)
 async def unregisterQKDM(qkdm_ID): 
 
-    roles = g.oidc_token_info['realm_access']['roles']
-    auth_ID = g.oidc_token_info['username']
+    #roles = g.oidc_token_info['realm_access']['roles']
+    #auth_ID = g.oidc_token_info['username']
+
+    header = request.headers.get('Authorization')
+    res, auth_ID, roles = await verifyToken(header) 
+    
+    if not res: 
+        value = {'message' : "ERROR: invalid Authorization header token"}
+        return value, 401
 
     if not any(r in roles for r in ['qkdm', 'admin']): 
+        app.logger.info(f"registerQKDM : rejected unauthorized user {auth_ID}")
         value =  {'message' : "ERROR: you are not an authorized QKDM or ADMIN"}
         return value, 401
 
