@@ -1,0 +1,39 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+
+metadata:
+  name: keyrequests.qks.controller
+
+spec:
+  group: qks.controller
+  versions: 
+    - name: v1 
+      served: true 
+      storage: true 
+      schema: 
+        openAPIV3Schema: 
+          type: object 
+          properties: 
+            spec: 
+              type: object 
+              properties: 
+                number: 
+                  type: integer 
+                size: 
+                  type: integer
+                master_SAE_ID: 
+                  type: string 
+                slave_SAE_ID: 
+                  type: string 
+                ids: 
+                  type: array
+                  items:
+                    type: string
+  
+  scope: Namespaced
+  names:
+    plural: keyrequests
+    singular: keyrequest
+    kind: KeyRequest
+    shortNames:
+     - keyreq
