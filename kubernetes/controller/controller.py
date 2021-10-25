@@ -24,7 +24,7 @@ def createSecret(namespace: str, key_data: dict) -> str:
     
 
 @kopf.on.create('qks.controller', 'v1', 'keyrequests')
-def on_create(namespace, spec, body, **kwargs):
+def keyreq_on_create(namespace, spec, body, **kwargs):
     logger.warning(f"A key request object has been created: {body}")
 
     try: 
@@ -64,3 +64,13 @@ def on_create(namespace, spec, body, **kwargs):
     logger.warning(f"created secret with name: {secret.metadata.name}")
     return {"secret-name" : secret.metadata.name}
         
+@kopf.on.create('qks.controller', 'v1', 'saes')
+def sae_on_create(namespace, spec, body, **kwargs): 
+    # if registration not manual try register to keycloak (check get_userinfo to know if already registered)
+    # then register to QKS  
+    return
+
+@kopf.on.delete('qks.controller', 'v1', 'saes')
+def sae_on_delete(namespace, spec, body, **kwargs):
+    # unregister from QKS 
+    return 
