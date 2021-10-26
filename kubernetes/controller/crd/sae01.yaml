@@ -1,0 +1,8 @@
+apiVersion: "qks.controller/v1"
+kind: Sae
+metadata:
+  name: sae01
+spec:
+  id: sae01 
+  registration_auto: false 
+
