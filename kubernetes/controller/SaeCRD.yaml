@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 
 metadata:
-  name: sae.qks.controller
+  name: saes.qks.controller
 
 spec:
   group: qks.controller
@@ -17,12 +17,10 @@ spec:
             spec: 
               type: object 
               properties: 
-                name: 
+                id: 
                   type: string 
-                registration: 
-                  type: string
-                secret_id: 
-                  type: string 
+                registration_auto: 
+                  type: boolean
   
   scope: Namespaced
   names:

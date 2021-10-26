@@ -12,34 +12,36 @@ example_data = {
 }
 
 logger = logging.getLogger('controller')
-client_id = 'test'
 
-
-
-def login(username) -> str : 
+def login(username:str, admin:bool=False) -> str :  
 
     api_instance = kubernetes.client.CoreV1Api()
     credential_secret = api_instance.read_namespaced_secret(f"{username}-credentials", "default").data
-    username = base64.b64decode(credential_secret["username"])
-    password = base64.b64decode(credential_secret["password"])
+    username = base64.b64decode(credential_secret["username"]).decode()
+    password = base64.b64decode(credential_secret["password"]).decode()
 
-    client_secret = api_instance.read_namespaced_secret(f"qksclient-secret", "default").data
-    client_id = base64.b64decode(client_secret["client_id"])
-    client_secret = base64.b64decode(credential_secret["client_secret"])
+    if not admin: 
+        client_secret = api_instance.read_namespaced_secret(f"qksclient-secret", "default").data
+        client_id = base64.b64decode(client_secret["client_id"]).decode()
+        client_secret = base64.b64decode(client_secret["client_secret"]).decode()
+        data = f"client_id={client_id}&client_secret={client_secret}&grant_type=password&scope=openid&username={username}&password={password}"
+    else: 
+        data = f"client_id=admin-cli&grant_type=password&scope=openid&username={username}&password={password}"
 
     header = {'Content-Type':'application/x-www-form-urlencoded'} 
-    data = f"client_id={client_id}&client_secret={client_secret}&grant_type=password&scope=openid&username={username}&password={password}"
+    
+    x = None 
     try: 
         x = requests.post('http://keycloak-service:8080/auth/realms/qks/protocol/openid-connect/token', data=data, headers=header)
         token = x.json()['access_token']
     # perform login 
     except Exception as e: 
-        logger.error(f"Login error: impossible to authenticate user {username}")
+        logger.error(f"Login error: impossible to authenticate user {username}: {x.json()}")
         token = None
     return token 
 
 def getKey(slave_SAE_ID:str, number:int, size:int, token:str) -> list : 
-    auth_header= {'Autorization' : f"Bearer {token}"}
+    auth_header= {'Authorization' : f"Bearer {token}"}
     # require keys calling getKey
     req_data = {"size" : size, "number" : number}
     req = requests.post(f'http://qks-service/api/v1/keys/{slave_SAE_ID}/enc_keys', json=req_data, headers=auth_header)
@@ -48,13 +50,30 @@ def getKey(slave_SAE_ID:str, number:int, size:int, token:str) -> list :
     return req.json()['keys']
 
 def getKeyWithKeyIDs(master_SAE_ID:str, ids:list, token:str) -> list : 
-    auth_header= {'Autorization' : f"Bearer {token}"}
+    auth_header= {'Authorization' : f"Bearer {token}"}
     # require keys calling getKeyWithKeyIDs
     req_data = {"key_IDs" : ids}
-    req = requests.post(f'http://qks-service/api/v1/keys/{master_SAE_ID}/dec_keys', json=req_data, headers=auth_header)
+    req = requests.post(f'http://qks-service:4000/api/v1/keys/{master_SAE_ID}/dec_keys', json=req_data, headers=auth_header)
     if req.status_code != 200 : 
         return {"message" : "unable to retrieve key. QKS error"}
     return req.json()['keys'] 
+
+def registerSAEtoQKS(sae_ID:str, token:str) -> bool : 
+    auth_header= {'Authorization' : f"Bearer {token}"}
+    req_data = {"id" : sae_ID}
+    req = requests.post(f'http://qks-service:4000/api/v1/saes', json=req_data, headers=auth_header)
+    if req.status_code != 200 : 
+        logger.error(f"error in registerSAEtoQKS: {req.status_code}")
+        return False
+    return True 
+
+def unregisterSAEfromQKS(sae_ID:str, token:str) -> bool: 
+    auth_header= {'Authorization' : f"Bearer {token}"}
+    req = requests.delete(f'http://qks-service:4000/api/v1/saes/{sae_ID}', headers=auth_header)
+    if req.status_code != 200 : 
+        logger.error(f"error in unregisterSAEfromQKS: {req.status_code}")
+        return False
+    return True 
 
 def createSecret(namespace: str, key_data: dict, name:str) -> str:
     api_instance = kubernetes.client.CoreV1Api()
@@ -105,11 +124,40 @@ def keyreq_on_create(namespace, spec, body, name, **kwargs):
         
 @kopf.on.create('qks.controller', 'v1', 'saes')
 def sae_on_create(namespace, spec, body, **kwargs): 
-    # if registration not manual try register to keycloak (check get_userinfo to know if already registered)
-    # then register to QKS  
-    return
+    # if registration not manual try register to keycloak 
+    logger.warning(f"A sae object has been created: {body}")
+    sae_id = spec['id'] 
+    registration_auto = spec['registration_auto']
+
+    if registration_auto is True: 
+        ## register to keycloack 
+        return {"message" : "NOT SUPPORTED YET"}
+    # then register to QKS   
+    token = login(sae_id)
+    if token is None: 
+        return {"message" : "ERROR in login"} 
+
+    if registerSAEtoQKS(sae_id, token): 
+        logger.warning(f"registered sae with id: {sae_id}")
+        return {"message" : "SAE registered successfully"}
+    else:
+        logger.warning(f"ERROR in registering sae with id: {sae_id}") 
+        return {"message" : "ERROR in sae registration to QKS"}
+        
 
 @kopf.on.delete('qks.controller', 'v1', 'saes')
 def sae_on_delete(namespace, spec, body, **kwargs):
+    logger.warning(f"A sae object has been deleted: {body}")
+     
+    sae_id = spec['id']
     # unregister from QKS 
-    return 
+    token = login(sae_id)
+    if token is None: 
+        return {"message" : "ERROR in login"} 
+    
+    if unregisterSAEfromQKS(sae_id, token): 
+        logger.warning(f"unregistered sae with id: {sae_id}")
+        return {"message" : "SAE removed successfully"}
+    else: 
+        logger.warning(f"ERROR in unregistering sae with id: {sae_id}") 
+        return {"message" : "ERROR in sae removal from QKS"}
