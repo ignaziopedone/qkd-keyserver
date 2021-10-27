@@ -1,8 +1,10 @@
+import uuid
 import kopf 
 import logging
 import kubernetes 
 import base64
 import requests
+from uuid import uuid4 
 
 example_data = {
     'keys' : [
@@ -25,20 +27,53 @@ def login(username:str, admin:bool=False) -> str :
         client_id = base64.b64decode(client_secret["client_id"]).decode()
         client_secret = base64.b64decode(client_secret["client_secret"]).decode()
         data = f"client_id={client_id}&client_secret={client_secret}&grant_type=password&scope=openid&username={username}&password={password}"
+        realm = "qks"
     else: 
         data = f"client_id=admin-cli&grant_type=password&scope=openid&username={username}&password={password}"
+        realm = "master"
 
     header = {'Content-Type':'application/x-www-form-urlencoded'} 
     
     x = None 
     try: 
-        x = requests.post('http://keycloak-service:8080/auth/realms/qks/protocol/openid-connect/token', data=data, headers=header)
+        x = requests.post(f'http://keycloak-service:8080/auth/realms/{realm}/protocol/openid-connect/token', data=data, headers=header)
         token = x.json()['access_token']
     # perform login 
     except Exception as e: 
         logger.error(f"Login error: impossible to authenticate user {username}: {x.json()}")
         token = None
     return token 
+
+def createKeycloakUser(username:str) -> dict : 
+    token = login("admin", admin=True)
+    auth_header= {'Authorization' : f"Bearer {token}"}
+    pwd = str(uuid4()).replace("-","")[:12]
+    req_data = {
+        "username": username,
+        "enabled": True,
+        "credentials": [{"value": pwd,"type": "password",}], 
+        "realmRoles" : ["2593bed0-1f88-45d9-9fb1-bf21e49bbbe4"],
+        "id" : username}
+
+    
+    req_user = requests.post("http://keycloak-service:8080/auth/admin/realms/qks/users", json=req_data, headers=auth_header)
+    if req_user.status_code != 201 : 
+        return None 
+
+    users = requests.get(f"http://keycloak-service:8080/auth/admin/realms/qks/users?search={username}", headers=auth_header).json() 
+    user_id = next((user["id"] for user in users if user["username"] == username), None)
+    
+    if user_id is None: 
+        return None
+
+    role_data = [{"id": "2593bed0-1f88-45d9-9fb1-bf21e49bbbe4", "name" : "sae"}] # sae role id 
+    req_role = requests.post(f"http://keycloak-service:8080/auth/admin/realms/qks/users/{user_id}/role-mappings/realm", json=role_data, headers=auth_header)
+
+    if req_role.status_code != 204: 
+        return None 
+
+    return {"username" : username, "password" : pwd}
+
 
 def getKey(slave_SAE_ID:str, number:int, size:int, token:str) -> list : 
     auth_header= {'Authorization' : f"Bearer {token}"}
@@ -131,7 +166,12 @@ def sae_on_create(namespace, spec, body, **kwargs):
 
     if registration_auto is True: 
         ## register to keycloack 
-        return {"message" : "NOT SUPPORTED YET"}
+        res = createKeycloakUser(sae_id)
+        if res is None: 
+            return {"message" : "ERROR in keycloak user creation "}
+        
+        createSecret(namespace, res, f"{sae_id}-credentials")
+    
     # then register to QKS   
     token = login(sae_id)
     if token is None: 

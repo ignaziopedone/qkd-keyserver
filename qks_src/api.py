@@ -916,7 +916,7 @@ async def closeStream(key_stream_ID:str, source_qks_ID:str) -> tuple[bool, dict]
 
 
 # MANAGEMENT FUNCTIONS
-async def init_server(config_file_name = "qks_src/config_files/config.yaml") -> tuple[bool, int ] : 
+async def init_server(config_file_name = "qks_src/config_files/config.yaml") -> tuple[bool, int, dict] : 
     # check that the qks can access admin DB with root credentials  
     global mongo_client, vault_client, config, http_client, redis_client
 
