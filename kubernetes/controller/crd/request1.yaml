@@ -1,9 +1,9 @@
 apiVersion: "qks.controller/v1"
 kind: KeyRequest
 metadata:
-  name: test
+  name: request1
 spec:
   number: 1
   size: 128
-  master_SAE_ID: sae1 
-  slave_SAE_ID: sae2 
+  master_SAE_ID: sae01 
+  slave_SAE_ID: sae02 
