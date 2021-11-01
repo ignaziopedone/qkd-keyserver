@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: qks-pv3
+  name: qks-pv1
   labels:
     type: local
 spec:
@@ -17,7 +17,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: qks-pv4
+  name: qks-pv2
   labels:
     type: local
 spec:
@@ -28,3 +28,19 @@ spec:
     storage: 100Mi
   hostPath:
     path: "/mnt/k8s/pv2"
+
+--- 
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: qks-pv3
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  accessModes: 
+    - ReadWriteOnce
+  capacity:
+    storage: 100Mi
+  hostPath:
+    path: "/mnt/k8s/pv3"

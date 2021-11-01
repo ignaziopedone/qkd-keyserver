@@ -1,4 +1,3 @@
-import uuid
 import kopf 
 import logging
 import kubernetes 
@@ -7,28 +6,27 @@ import requests
 from uuid import uuid4 
 
 example_data = {
-    'keys' : [
-        {'key_ID' : 'exampleid1', 'key' : 'examplekey1'},
-        {'key_ID' : 'exampleid2', 'key' : 'examplekey2'}
-    ]
-}
+    'keys' : [  {'key_ID' : 'exampleid1', 'key' : 'examplekey1'},
+                {'key_ID' : 'exampleid2', 'key' : 'examplekey2'}  ]}
 
 logger = logging.getLogger('controller')
 
 def login(username:str, admin:bool=False) -> str :  
-
     api_instance = kubernetes.client.CoreV1Api()
-    credential_secret = api_instance.read_namespaced_secret(f"{username}-credentials", "default").data
-    username = base64.b64decode(credential_secret["username"]).decode()
-    password = base64.b64decode(credential_secret["password"]).decode()
-
+    
     if not admin: 
-        client_secret = api_instance.read_namespaced_secret(f"qksclient-secret", "default").data
+        credential_secret = api_instance.read_namespaced_secret(f"{username}-credentials", "default").data
+        username = base64.b64decode(credential_secret["username"]).decode()
+        password = base64.b64decode(credential_secret["password"]).decode()
+        client_secret = api_instance.read_namespaced_secret(f"keycloak_secret", "default").data
         client_id = base64.b64decode(client_secret["client_id"]).decode()
         client_secret = base64.b64decode(client_secret["client_secret"]).decode()
         data = f"client_id={client_id}&client_secret={client_secret}&grant_type=password&scope=openid&username={username}&password={password}"
         realm = "qks"
     else: 
+        credential_secret = api_instance.read_namespaced_secret(f"keycloak_secret", "default").data
+        username = base64.b64decode(credential_secret["keycloak-user"]).decode()
+        password = base64.b64decode(credential_secret["keycloak-password"]).decode()
         data = f"client_id=admin-cli&grant_type=password&scope=openid&username={username}&password={password}"
         realm = "master"
 
@@ -81,7 +79,7 @@ def getKey(slave_SAE_ID:str, number:int, size:int, token:str) -> list :
     req_data = {"size" : size, "number" : number}
     req = requests.post(f'http://qks-service/api/v1/keys/{slave_SAE_ID}/enc_keys', json=req_data, headers=auth_header)
     if req.status_code != 200 : 
-        return {"message" : "unable to retrieve key, QKS error"}
+        return []
     return req.json()['keys']
 
 def getKeyWithKeyIDs(master_SAE_ID:str, ids:list, token:str) -> list : 
@@ -90,7 +88,7 @@ def getKeyWithKeyIDs(master_SAE_ID:str, ids:list, token:str) -> list :
     req_data = {"key_IDs" : ids}
     req = requests.post(f'http://qks-service:4000/api/v1/keys/{master_SAE_ID}/dec_keys', json=req_data, headers=auth_header)
     if req.status_code != 200 : 
-        return {"message" : "unable to retrieve key. QKS error"}
+        return []
     return req.json()['keys'] 
 
 def registerSAEtoQKS(sae_ID:str, token:str) -> bool : 
@@ -121,7 +119,7 @@ def createSecret(namespace: str, key_data: dict, name:str) -> str:
 
 @kopf.on.create('qks.controller', 'v1', 'keyrequests')
 def keyreq_on_create(namespace, spec, body, name, **kwargs):
-    logger.warning(f"A key request object has been created: {body}")
+    logger.warning(f"A key request object has been created: {name}")
 
     cr_name = name
     try: 
@@ -158,9 +156,9 @@ def keyreq_on_create(namespace, spec, body, name, **kwargs):
     return {"secret-name" : secret.metadata.name}
         
 @kopf.on.create('qks.controller', 'v1', 'saes')
-def sae_on_create(namespace, spec, body, **kwargs): 
+def sae_on_create(namespace, spec, body, name, **kwargs): 
     # if registration not manual try register to keycloak 
-    logger.warning(f"A sae object has been created: {body}")
+    logger.warning(f"A sae object has been created: {name}")
     sae_id = spec['id'] 
     registration_auto = spec['registration_auto']
 
@@ -182,12 +180,11 @@ def sae_on_create(namespace, spec, body, **kwargs):
         return {"message" : "SAE registered successfully"}
     else:
         logger.warning(f"ERROR in registering sae with id: {sae_id}") 
-        return {"message" : "ERROR in sae registration to QKS"}
-        
+        return {"message" : "ERROR in sae registration to QKS"}    
 
 @kopf.on.delete('qks.controller', 'v1', 'saes')
-def sae_on_delete(namespace, spec, body, **kwargs):
-    logger.warning(f"A sae object has been deleted: {body}")
+def sae_on_delete(namespace, spec, body, name, **kwargs):
+    logger.warning(f"A sae object has been deleted: {name}")
      
     sae_id = spec['id']
     # unregister from QKS 
