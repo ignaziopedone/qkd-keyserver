@@ -65,8 +65,6 @@
     }
 	}, 
 	"standard_key_size" : "Integer",
-	"max_key_count" : "Integer", 
-	"available_keys" : "Integer",
 	"reserved_keys" : 
 		[
 			{ 
@@ -100,7 +98,6 @@ jsonDiagram {
 {
 "<color:red>**Routing Table **" : "", 
   	"SAE ID" : "String", 
-	"type " : "[static/dinamic]",
 	"next hop" : "String", 
 	"dest" : "String", 
 	"cost" : "Integer" ,
@@ -135,7 +132,8 @@ jsonDiagram {
         },
 		"..."
     ],
-    "timestamp" : "String"
+    "timestamp" : "String",
+	"authentication" : "String"
 
 }
 @endjson
