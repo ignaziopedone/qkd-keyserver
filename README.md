@@ -1,7 +1,5 @@
 # QKD key server 2.0
 
-# TO BE UPDATED
-
 ## files and modules 
 ### qks_core
 This folder contains all files related with qks code. 

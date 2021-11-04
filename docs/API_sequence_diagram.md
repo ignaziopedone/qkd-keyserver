@@ -1,11 +1,3 @@
-# Pictures
-## QKD Key Exchange (PTP) 
-![](./img/PTP_sequence_diagram.svg)
-
-## Indirect Key Exchange (TN) 
-![](./img/TN_sequence_diagram.svg)
-
-# PlantUML code
 ## QKD Key Exchange (PTP) 
 
 @startuml
@@ -101,5 +93,6 @@ BSAE -[#blue]> BQKS ++ #LightBlue: getKeyWithIDs \n(master_SAE_ID, AKID)
 BQKS -[#blue]-> BSAE --: < AKID, key >
 
 @enduml
+
 
 

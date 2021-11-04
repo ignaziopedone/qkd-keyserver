@@ -3,11 +3,16 @@
 ## MongoDB view 
 ![](./img/DB_model_JSON_server.png)
 
-## Routing model
-![](img/RoutingTable_model_JSON.png)
-![](img/qkdLSA_Packet.png)
+## Routing packet
+<img src="img/qkdLSA_Packet.png" width="600"/>
 
+## Routing tables
+<img src="img/RoutingTable_model_JSON.png" width="200"/>
 
+<!-- ![](img/qkdLSA_Packet.png)
+![](img/RoutingTable_model_JSON.png) -->
+
+<!-- 
 # PlantUML JSON Codes
 
 @startjson
@@ -136,4 +141,4 @@ jsonDiagram {
 	"authentication" : "String"
 
 }
-@endjson
+@endjson -->

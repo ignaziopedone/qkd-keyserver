@@ -36,9 +36,8 @@
 ## JSONs data
 ![](./img/API_server_JSON.png)
 
-
+<!-- 
 # Plant UML Codes 
-## SERVER
 
 @startjson
 {   
@@ -257,3 +256,5 @@
     "ids" : ["String", "..."]
 }
 @endjson 
+
+-->
