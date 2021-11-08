@@ -16,9 +16,15 @@
 # PlantUML JSON Codes
 
 @startjson
-#highlight "_id"
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
-    "<color:blue>**quantum_key_server**" : "", 
+    "<color:blue>**quantum_key_servers**" : "", 
     "_id": "String",
     "address" : {
       "ip" : "String", 
@@ -31,16 +37,21 @@
 	"neighbor_qks" : [
 		"String",
 		"..."
-	],
-	"static_route" : "String"
+	]
 }
 @endjson
 
 @startjson
-#highlight "_id"
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
 "<color:blue>**qkd_modules**" : "", 
-  	"_id": "String (uuid4) ", 
+  	"_id": "String", 
 	"address" : {
       "ip" : "String", 
       "port" : "Integer"
@@ -50,15 +61,20 @@
 	"protocol" : "String", 
 	"parameters" : {
 		"max_key_count" : "Integer",
-		"standard_key_size" : "Integer", 
-		"parameter" : "anything"
+		"standard_key_size" : "Integer"
 	}
 }
 @endjson
 
 
 @startjson
-#highlight "_id"
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
 "<color:blue>**key_streams**" : "", 
 	"_id": "String (uuid4)",
@@ -69,6 +85,13 @@
       "port" : "Integer"
     }
 	}, 
+		"qkdm" : {
+		"id": "String (uuid4)", 
+		"address" : {
+      		"ip" : "String", 
+      		"port" : "Integer"
+    	}
+	},
 	"standard_key_size" : "Integer",
 	"reserved_keys" : 
 		[
@@ -79,14 +102,8 @@
 			"key_length" : "Integer"
 			} ,
 			"..."
-		],
-	"qkdm" : {
-		"id": "String (uuid4)", 
-		"address" : {
-      		"ip" : "String", 
-      		"port" : "Integer"
-    	}
-	}
+		]
+
 	
 }
 @endjson
