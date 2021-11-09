@@ -747,7 +747,6 @@ async def forwardData(data:str, decryption_key_id:str, decryption_key_stream_id:
             key_enc = b64encode(key).decode()
             res = await vault_client.writeOrUpdate(f"{config['qks']['id']}/indirect", str(key_id), {str(key_id) : key_enc}) 
             start += 36 + byte_size
-        print(f"FORWARD PATH {config['qks']['id']}/indirect")
         return True, {'message' : 'key saved successfully'}
     
     else : # -> forward to next hop  

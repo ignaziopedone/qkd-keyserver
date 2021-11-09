@@ -3,17 +3,28 @@
 ## MongoDB view 
 ![](./img/DB_model_JSON_server.png)
 
-## Routing model
-![](img/RoutingTable_model_JSON.png)
-![](img/qkdLSA_Packet.png)
+## Routing packet
+<img src="img/qkdLSA_Packet.png" width="600"/>
 
+## Routing tables
+<img src="img/RoutingTable_model_JSON.png" width="200"/>
 
+<!-- ![](img/qkdLSA_Packet.png)
+![](img/RoutingTable_model_JSON.png) -->
+
+<!-- 
 # PlantUML JSON Codes
 
 @startjson
-#highlight "_id"
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
-    "<color:blue>**quantum_key_server**" : "", 
+    "<color:blue>**quantum_key_servers**" : "", 
     "_id": "String",
     "address" : {
       "ip" : "String", 
@@ -26,16 +37,21 @@
 	"neighbor_qks" : [
 		"String",
 		"..."
-	],
-	"static_route" : "String"
+	]
 }
 @endjson
 
 @startjson
-#highlight "_id"
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
 "<color:blue>**qkd_modules**" : "", 
-  	"_id": "String (uuid4) ", 
+  	"_id": "String", 
 	"address" : {
       "ip" : "String", 
       "port" : "Integer"
@@ -45,15 +61,20 @@
 	"protocol" : "String", 
 	"parameters" : {
 		"max_key_count" : "Integer",
-		"standard_key_size" : "Integer", 
-		"parameter" : "anything"
+		"standard_key_size" : "Integer"
 	}
 }
 @endjson
 
 
 @startjson
-#highlight "_id"
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
 "<color:blue>**key_streams**" : "", 
 	"_id": "String (uuid4)",
@@ -64,9 +85,14 @@
       "port" : "Integer"
     }
 	}, 
+		"qkdm" : {
+		"id": "String (uuid4)", 
+		"address" : {
+      		"ip" : "String", 
+      		"port" : "Integer"
+    	}
+	},
 	"standard_key_size" : "Integer",
-	"max_key_count" : "Integer", 
-	"available_keys" : "Integer",
 	"reserved_keys" : 
 		[
 			{ 
@@ -76,14 +102,8 @@
 			"key_length" : "Integer"
 			} ,
 			"..."
-		],
-	"qkdm" : {
-		"id": "String (uuid4)", 
-		"address" : {
-      		"ip" : "String", 
-      		"port" : "Integer"
-    	}
-	}
+		]
+
 	
 }
 @endjson
@@ -100,7 +120,6 @@ jsonDiagram {
 {
 "<color:red>**Routing Table **" : "", 
   	"SAE ID" : "String", 
-	"type " : "[static/dinamic]",
 	"next hop" : "String", 
 	"dest" : "String", 
 	"cost" : "Integer" ,
@@ -135,7 +154,8 @@ jsonDiagram {
         },
 		"..."
     ],
-    "timestamp" : "String"
+    "timestamp" : "String",
+	"authentication" : "String"
 
 }
-@endjson
+@endjson -->
