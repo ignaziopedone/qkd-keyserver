@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: qks-controller
+  name: qkd-operator
   labels:
-    app: qks-controller
+    app: qkd-operator
 spec:
   replicas: 1 # make sure to not have more than one replicas
   strategy:
     type: Recreate # make sure the old pod is being killed before the new pod is being created
   selector:
     matchLabels:
-      app: qks-controller
+      app: qkd-operator
   template:
     metadata:
       labels:
-        app: qks-controller
+        app: qkd-operator
     spec:
       containers:
-      - name: qks-controller
+      - name: qkd-operator
         image: lorenzopintore/qks_controller
