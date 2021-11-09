@@ -14,31 +14,29 @@ logger = logging.getLogger('controller')
 def login(username:str, admin:bool=False) -> str :  
     api_instance = kubernetes.client.CoreV1Api()
     
-    if not admin: 
-        credential_secret = api_instance.read_namespaced_secret(f"{username}-credentials", "default").data
-        username = base64.b64decode(credential_secret["username"]).decode()
-        password = base64.b64decode(credential_secret["password"]).decode()
-        client_secret = api_instance.read_namespaced_secret(f"keycloak_secret", "default").data
-        client_id = base64.b64decode(client_secret["client_id"]).decode()
-        client_secret = base64.b64decode(client_secret["client_secret"]).decode()
-        data = f"client_id={client_id}&client_secret={client_secret}&grant_type=password&scope=openid&username={username}&password={password}"
-        realm = "qks"
-    else: 
-        credential_secret = api_instance.read_namespaced_secret(f"keycloak_secret", "default").data
-        username = base64.b64decode(credential_secret["keycloak-user"]).decode()
-        password = base64.b64decode(credential_secret["keycloak-password"]).decode()
-        data = f"client_id=admin-cli&grant_type=password&scope=openid&username={username}&password={password}"
-        realm = "master"
-
-    header = {'Content-Type':'application/x-www-form-urlencoded'} 
-    
-    x = None 
     try: 
+        if not admin: 
+            credential_secret = api_instance.read_namespaced_secret(f"{username}-credentials", "default").data
+            username = base64.b64decode(credential_secret["username"]).decode()
+            password = base64.b64decode(credential_secret["password"]).decode()
+            client_secret = api_instance.read_namespaced_secret(f"keycloak-secret", "default").data
+            client_id = base64.b64decode(client_secret["client_id"]).decode()
+            client_secret = base64.b64decode(client_secret["client_secret"]).decode()
+            data = f"client_id={client_id}&client_secret={client_secret}&grant_type=password&scope=openid&username={username}&password={password}"
+            realm = "qks"
+        else: 
+            credential_secret = api_instance.read_namespaced_secret(f"keycloak-secret", "default").data
+            username = base64.b64decode(credential_secret["keycloak-user"]).decode()
+            password = base64.b64decode(credential_secret["keycloak-password"]).decode()
+            data = f"client_id=admin-cli&grant_type=password&scope=openid&username={username}&password={password}"
+            realm = "master"
+
+        header = {'Content-Type':'application/x-www-form-urlencoded'}  
         x = requests.post(f'http://keycloak-service:8080/auth/realms/{realm}/protocol/openid-connect/token', data=data, headers=header)
         token = x.json()['access_token']
     # perform login 
     except Exception as e: 
-        logger.error(f"Login error: impossible to authenticate user {username}: {x.json()}")
+        logger.error(f"Login error: impossible to authenticate user {username}")
         token = None
     return token 
 
@@ -77,7 +75,7 @@ def getKey(slave_SAE_ID:str, number:int, size:int, token:str) -> list :
     auth_header= {'Authorization' : f"Bearer {token}"}
     # require keys calling getKey
     req_data = {"size" : size, "number" : number}
-    req = requests.post(f'http://qks-service/api/v1/keys/{slave_SAE_ID}/enc_keys', json=req_data, headers=auth_header)
+    req = requests.post(f'http://qks-service:4000/api/v1/keys/{slave_SAE_ID}/enc_keys', json=req_data, headers=auth_header)
     if req.status_code != 200 : 
         return []
     return req.json()['keys']
@@ -149,7 +147,7 @@ def keyreq_on_create(namespace, spec, body, name, **kwargs):
         ret_data = getKeyWithKeyIDs(master_SAE_ID, ids, token)
  
     secret_data = {}
-    for el in ret_data['keys']: 
+    for el in ret_data: 
         secret_data[el['key_ID']] = el['key']
     secret = createSecret(namespace, secret_data, cr_name)
     logger.warning(f"created secret with name: {secret.metadata.name}")
