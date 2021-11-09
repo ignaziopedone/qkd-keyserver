@@ -13,13 +13,12 @@ qks:
   max_key_size: 512
   min_key_size: 128
   max_sae_id_count: 0
-  indirect_key_size: 256
   indirect_max_key_count: 20
 vault: 
   host : 172.18.0.20
   port : 8200
-  token : s.SVrGCFg6s5SfaWOKSa4lHDLF
-  key64 : vkY52pN+DABjeDaq1lsPbm3OHGYSg/A4UfRwcGN4ygE=
+  token : s.IvlbsITnckYx3RRxBDC24iLS
+  key64 : TjPNkjfDN1hwM6K7kXupVaTLkx6RMXu1crwWGMJucUM=
 redis: 
   user: root
   password: password 
