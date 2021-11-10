@@ -1,10 +1,9 @@
-from quart import request, Quart, g, flask_patch
+from quart import request, Quart, flask_patch
 import asyncio
 import api
 import nest_asyncio
 import sys
 import logging 
-from flask_oidc import OpenIDConnect
 import traceback
 import aiohttp
 
@@ -15,9 +14,6 @@ prefix = "/api/v1"
 logging.basicConfig(filename='qks.log', filemode='w', level=logging.INFO)
 http_client : aiohttp.ClientSession = None
 keycloak_data = {}
-
-oidc = OpenIDConnect()
-oidc.init_app(app)
 
 async def verifyToken(header: str) -> tuple[bool, str, list] : 
     if header is None or header == "": 
@@ -35,10 +31,7 @@ async def verifyToken(header: str) -> tuple[bool, str, list] :
 
 # NORTHBOUND INTERFACE 
 @app.route(prefix+"/keys/<slave_SAE_ID>/status", methods=['GET'])
-#@oidc.accept_token(True)
 async def getStatus(slave_SAE_ID):
-    #roles = g.oidc_token_info['realm_access']['roles']
-    #master_SAE_ID = g.oidc_token_info['username']
      
     header = request.headers.get('Authorization')
     res, master_SAE_ID, roles = await verifyToken(header) 
@@ -68,11 +61,7 @@ async def getStatus(slave_SAE_ID):
 
 
 @app.route(prefix+"/keys/<slave_SAE_ID>/enc_keys", methods=['POST'])
-#@oidc.accept_token(True)
 async def getKey(slave_SAE_ID):
-    
-    #roles = g.oidc_token_info['realm_access']['roles']
-    #master_SAE_ID = g.oidc_token_info['username']
 
     header = request.headers.get('Authorization')
     res, master_SAE_ID, roles = await verifyToken(header) 
@@ -106,10 +95,7 @@ async def getKey(slave_SAE_ID):
         return value, 400 
 
 @app.route(prefix+"/keys/<master_SAE_ID>/dec_keys", methods=['POST'])
-#@oidc.accept_token(True)
 async def getKeyWithKeyIDs(master_SAE_ID):
-    #roles = g.oidc_token_info['realm_access']['roles']
-    #slave_SAE_ID = g.oidc_token_info['username']
 
     header = request.headers.get('Authorization')
     res, slave_SAE_ID, roles = await verifyToken(header) 
@@ -140,10 +126,7 @@ async def getKeyWithKeyIDs(master_SAE_ID):
         return value, 400 
 
 @app.route(prefix+"/qkdms", methods=['GET'])
-#@oidc.accept_token(True)
 async def getQKDMs(): 
-
-    #roles = g.oidc_token_info['realm_access']['roles']
     header = request.headers.get('Authorization')
     res, username, roles = await verifyToken(header) 
     
@@ -166,11 +149,7 @@ async def getQKDMs():
         return value, 503
 
 @app.route(prefix+"/saes", methods=['POST'])
-#@oidc.accept_token(True)
 async def registerSAE(): 
-
-    #roles = g.oidc_token_info['realm_access']['roles']
-    #auth_ID = g.oidc_token_info['username']
 
     header = request.headers.get('Authorization')
     res, auth_ID, roles = await verifyToken(header) 
@@ -204,11 +183,7 @@ async def registerSAE():
         return value, 400
 
 @app.route(prefix+"/saes/<SAE_ID>", methods=['DELETE'])
-#@oidc.accept_token(True)
 async def unregisterSAE(SAE_ID): 
-
-    #roles = g.oidc_token_info['realm_access']['roles']
-    #auth_ID = g.oidc_token_info['username']
 
     header = request.headers.get('Authorization')
     res, auth_ID, roles = await verifyToken(header) 
@@ -238,10 +213,8 @@ async def unregisterSAE(SAE_ID):
 
 
 @app.route(prefix+"/qkdms/<qkdm_ID>/streams", methods=['POST'])
-#@oidc.accept_token(True)
 async def startQKDMStream(qkdm_ID) : 
 
-    #roles = g.oidc_token_info['realm_access']['roles']
     header = request.headers.get('Authorization')
     res, auth_ID, roles = await verifyToken(header) 
     
@@ -264,10 +237,8 @@ async def startQKDMStream(qkdm_ID) :
         return value, 503
 
 @app.route(prefix+"/qkdms/<qkdm_ID>/streams", methods=['DELETE'])
-#@oidc.accept_token(True)
 async def deleteQKDMStreams(qkdm_ID) : 
 
-    #roles = g.oidc_token_info['realm_access']['roles']
     header = request.headers.get('Authorization')
     res, auth_ID, roles = await verifyToken(header) 
     
@@ -291,10 +262,8 @@ async def deleteQKDMStreams(qkdm_ID) :
     
 
 @app.route(prefix+"/qks", methods=['POST'])
-#@oidc.accept_token(True)
 async def registerQKS(): 
     
-    #roles = g.oidc_token_info['realm_access']['roles']
     header = request.headers.get('Authorization')
     res, auth_ID, roles = await verifyToken(header) 
     
@@ -331,11 +300,7 @@ async def registerQKS():
 
 # SOUTHBOUND INTERFACE 
 @app.route(prefix+"/qkdms", methods=['POST'])
-#@oidc.accept_token(True)
 async def registerQKDM(): 
-
-    #auth_ID = g.oidc_token_info['username']
-    #roles = g.oidc_token_info['realm_access']['roles']
     
     header = request.headers.get('Authorization')
     res, auth_ID, roles = await verifyToken(header) 
@@ -379,11 +344,7 @@ async def registerQKDM():
         return value, 400
 
 @app.route(prefix+"/qkdms/<qkdm_ID>", methods=['DELETE'])
-#@oidc.accept_token(True)
 async def unregisterQKDM(qkdm_ID): 
-
-    #roles = g.oidc_token_info['realm_access']['roles']
-    #auth_ID = g.oidc_token_info['username']
 
     header = request.headers.get('Authorization')
     res, auth_ID, roles = await verifyToken(header) 
