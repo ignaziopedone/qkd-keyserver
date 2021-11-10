@@ -20,7 +20,7 @@ spec:
         ports:
         - containerPort: 4000
         volumeMounts:
-        - mountPath: /usr/app/qkd-keyserver/qks_src/config_files
+        - mountPath: /usr/app/qkd-keyserver/qks_core/config_files
           name: config
       volumes: 
         - name: config 
@@ -29,8 +29,6 @@ spec:
             items: 
             - key: qks-config
               path: config.yaml
-            - key: keycloak_config
-              path: client_secrets.json
 
   
 
