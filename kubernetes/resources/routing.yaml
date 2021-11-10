@@ -41,7 +41,7 @@ metadata:
 spec:
   selector:
     app: routing
-  type: LoadBalancer  
+  type: nodePort
   ports:
     - protocol: TCP
       port: 7000

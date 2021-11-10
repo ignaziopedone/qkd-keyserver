@@ -43,7 +43,7 @@ metadata:
 spec:
   selector:
     app: qks
-  type: LoadBalancer  
+  type: nodePort  
   ports:
     - protocol: TCP
       port: 4000

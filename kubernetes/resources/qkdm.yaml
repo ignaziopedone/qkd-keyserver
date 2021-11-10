@@ -40,7 +40,7 @@ metadata:
 spec:
   selector:
     app: qkdm
-  type: LoadBalancer  
+  type: nodePort 
   ports:
     - name: qkdm
       protocol: TCP

@@ -59,7 +59,7 @@ metadata:
 spec:
   selector:
     app: keycloak
-  type: LoadBalancer  
+  type: nodePort  
   ports:
     - protocol: TCP
       port: 8080
