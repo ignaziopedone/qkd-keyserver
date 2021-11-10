@@ -21,7 +21,7 @@ spec:
         - containerPort: 5000
         - containerPort: 6000
         volumeMounts:
-        - mountPath: /usr/app/qkd-module/received_config_files
+        - mountPath: /usr/app/qkd-module/qkdm_src/config_files
           name: config
       volumes: 
         - name: config 
