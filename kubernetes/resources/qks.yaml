@@ -43,7 +43,7 @@ metadata:
 spec:
   selector:
     app: qks
-  type: nodePort  
+  type: NodePort  
   ports:
     - protocol: TCP
       port: 4000

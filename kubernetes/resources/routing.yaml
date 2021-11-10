@@ -41,7 +41,7 @@ metadata:
 spec:
   selector:
     app: routing
-  type: nodePort
+  type: NodePort
   ports:
     - protocol: TCP
       port: 7000

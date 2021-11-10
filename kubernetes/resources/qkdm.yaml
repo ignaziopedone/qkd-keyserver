@@ -40,7 +40,7 @@ metadata:
 spec:
   selector:
     app: qkdm
-  type: nodePort 
+  type: NodePort 
   ports:
     - name: qkdm
       protocol: TCP
