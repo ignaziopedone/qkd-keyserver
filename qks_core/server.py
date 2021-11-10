@@ -16,16 +16,6 @@ logging.basicConfig(filename='qks.log', filemode='w', level=logging.INFO)
 http_client : aiohttp.ClientSession = None
 keycloak_data = {}
 
-app.config.update({
-    'SECRET_KEY': 'SomethingNotEntirelySecret',
-    'OIDC_CLIENT_SECRETS': './config_files/client_secrets.json',
-    'OIDC_INTROSPECTION_AUTH_METHOD': 'client_secret_post',
-    'OIDC_TOKEN_TYPE_HINT': 'access_token',
-    'OIDC_OPENID_REALM': 'qks',
-    'OIDC_RESOURCE_SERVER_ONLY' : True,
-    'OIDC-SCOPES':['openid'], 
-})
-
 oidc = OpenIDConnect()
 oidc.init_app(app)
 
