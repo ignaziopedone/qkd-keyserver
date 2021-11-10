@@ -119,8 +119,8 @@ jsonDiagram {
 </style>
 {
 "<color:red>**Routing Table **" : "", 
-  	"SAE ID" : "String", 
-	"next hop" : "String", 
+  	"SAE_ID" : "String", 
+	"next_hop" : "String", 
 	"dest" : "String", 
 	"cost" : "Integer" ,
 	"length" : "Integer" 

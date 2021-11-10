@@ -81,10 +81,8 @@ def registerQKS(QKS_ID, QKS_IP, QKS_port, routing_IP, routing_port):
 	else: 
 		print(f"Error in QKS registration: {x.json()}")
 		return False 
-	
 
 def registerQKDM(qkdmID, dest_qks, dest_qkdm) :
-	#qkdmID = input("Insert QKDM ID \n") 
 
 	ret = createQksUser(qkdmID, "password", "qkdm")
 	if ret is None:
@@ -97,7 +95,6 @@ def registerQKDM(qkdmID, dest_qks, dest_qkdm) :
 		return 
 
 	auth_header= {'Authorization' : f"Bearer {token}"}
-	#dest_qks, dest_qkdm = input("Insert destination QKS and QKMD \n").split(" ")
 	qkdm_reg_data = {
 		'QKDM_ID' : qkdmID, 
 		'protocol' : "fake",
@@ -115,12 +112,29 @@ def registerQKDM(qkdmID, dest_qks, dest_qkdm) :
 	if x.status_code != 200: 
 		print(f"ERROR in QKDM registration: {x.json()}") 
 	else: 
-		print(x.json())
+		res = x.json()
+		data = { 'role_id' : res['vault_data']['role_id'], 'secret_id' : res['vault_data']['secret_id'] }
+		app_role_login = requests.post(f'http://vault-service:8200/v1/auth/approle/login', json=data)
+		res['vault_data']['token'] = app_role_login.json()['auth']['client_token']
+		print(res)
 	return 
 
+def startQKDMstream(qkdmID): 
+	token = login("admin", "password", "qks")
+	if token is None: 
+		print("ERROR in ADMIN login")
+		return False
+
+	auth_header= {'Authorization' : f"Bearer {token}"}
+	x = requests.post(f'http://qks-service:4000/api/v1/qkdms/{qkdmID}/streams', headers=auth_header)
+	if x.status_code == 200: 
+		print(f"KeyStream started on QKDM {qkdmID}")
+		return True
+	else: 
+		print(f"Error in KeyStream creation for QKDM {qkdmID}: {x.json()}")
+		return False 
 
 def main(): 
-	#command = int(input("digit 1 to register the admin user, 2 to register a QKDM \n")) 
 	print(f"EXECUTING WITH: {sys.argv}")
 	if int(sys.argv[1]) == 1: 
 		ret = createQksUser("admin", "password", "admin")
@@ -128,6 +142,9 @@ def main():
 		registerQKDM(sys.argv[2], sys.argv[3], sys.argv[4])
 	if int(sys.argv[1]) == 3: 
 		registerQKS(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6])
+	if int(sys.argv[1] == 4): 
+		startQKDMstream(sys.argv[2])
+
 main()
 
 
