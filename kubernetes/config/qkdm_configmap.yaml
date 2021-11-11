@@ -7,7 +7,7 @@ data:
     keycloak:
       address: keycloak-service
       client_id: qks
-      client_secret: 29db8d09-97f1-4e5c-8744-9e07bd4ff65a # TO BE UPDATED! 
+      client_secret: 4f0d1cd9-4dc8-46b9-9651-fdfe118f53f8  
       password: password
       port: 8080
       realm: qks
@@ -20,12 +20,12 @@ data:
       port: 27017
       user: qkdm1
     qkd_device:
-      host: 172.18.0.102 # OTHER CLUSTER ADDRESS! 
-      port: 31500 # OTHER CLUSTER NODEPORT! 
+      host: 130.192.1.86 # OTHER CLUSTER ADDRESS! 
+      port:  6000 # LISTENER: CONTAINER PORT - SENDER: NODE PORT
       role: receiver
     qkdm:
       dest_ID: qkdm2
-      dest_IP: 172.18.0.102 # OTHER CLUSTER ADDRESS! 
+      dest_IP: 130.192.1.86 # OTHER CLUSTER ADDRESS! 
       dest_port: 31000 # OTHER CLUSTER NODEPORT! 
       id: qkdm1
       init: true

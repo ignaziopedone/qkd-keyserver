@@ -10,7 +10,7 @@ data:
       user: rootuser
       password: rootpwd
       auth_src : admin
-      db : qks1
+      db : qks
     qks:
       id: qks1
       ip: qks-service  # information for the QKDM -> cluster address 
@@ -29,7 +29,7 @@ data:
     redis: 
       user: root
       password: password 
-      topic: register1 
+      topic: register
       host: redis-service
       port: 6379
       db : 1

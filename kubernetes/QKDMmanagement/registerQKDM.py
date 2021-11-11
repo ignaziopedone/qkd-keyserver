@@ -142,7 +142,7 @@ def main():
 		registerQKDM(sys.argv[2], sys.argv[3], sys.argv[4])
 	if int(sys.argv[1]) == 3: 
 		registerQKS(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6])
-	if int(sys.argv[1] == 4): 
+	if int(sys.argv[1]) == 4: 
 		startQKDMstream(sys.argv[2])
 
 main()

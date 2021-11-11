@@ -342,7 +342,7 @@ data:
               "attributes": {}
             }
           ],
-          "qks1": [],
+          "qks": [],
           "account": [
             {
               "id": "f2474ba0-2326-41c6-9636-bde81fe2e249",
@@ -474,11 +474,11 @@ data:
         {
           "id": "6f4202c0-fe07-4cf7-9557-3ef064c588d5",
           "createdTimestamp": 1634760352827,
-          "username": "service-account-qks1",
+          "username": "service-account-qks",
           "enabled": true,
           "totp": false,
           "emailVerified": false,
-          "serviceAccountClientId": "qks1",
+          "serviceAccountClientId": "qks",
           "disableableCredentialTypes": [],
           "requiredActions": [],
           "realmRoles": [
@@ -721,7 +721,7 @@ data:
         },
         {
           "id": "68381084-2fbc-42dd-ab0c-43ed0d5fae2c",
-          "clientId": "qks1",
+          "clientId": "qks",
           "rootUrl": "https://www.keycloak.org/app/",
           "adminUrl": "https://www.keycloak.org/app/",
           "surrogateAuthRequired": false,

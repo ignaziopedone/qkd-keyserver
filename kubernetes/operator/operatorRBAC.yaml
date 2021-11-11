@@ -1,0 +1,37 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: qkd-operator
+rules:
+- apiGroups: ["qks.controller"]
+  resources: ["keyrequests"]
+  verbs: ["*"]
+- apiGroups: ["qks.controller"]
+  resources: ["saes"]
+  verbs: ["*"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["*"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["*"]
+
+--- 
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: qkd-operator
+
+--- 
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: qkd-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: qkd-operator
+subjects:
+  - kind: ServiceAccount
+    name: qkd-operator
+    namespace: default
