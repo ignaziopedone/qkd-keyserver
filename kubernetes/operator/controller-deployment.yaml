@@ -16,8 +16,8 @@ spec:
       labels:
         app: qkd-operator
     spec:
-      containers:
       serviceAccountName: qkd-operator
+      containers:
       - name: qkd-operator
         image: lorenzopintore/qks_controller
         env: 
