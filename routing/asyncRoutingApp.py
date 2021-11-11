@@ -392,7 +392,7 @@ async def main() :
     lsaUpdateTask = asyncio.create_task(lsaUpdate())
     listenForChangesTask = asyncio.create_task(listenForChanges())
     logger.info(f"main : created tasks for timer and pubsub listener")
-    server = await asyncio.start_server(receiveSocket, '0.0.0.0', int(config['routing']['port']))
+    server = await asyncio.start_server(receiveSocket, '0.0.0.0', 7000)
     async with server:
         await server.serve_forever()
 
