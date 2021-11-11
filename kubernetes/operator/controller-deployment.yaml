@@ -20,3 +20,6 @@ spec:
       serviceAccountName: qkd-operator
       - name: qkd-operator
         image: lorenzopintore/qks_controller
+        env: 
+        - name: SECRET_NAMESPACE 
+          value: qkdns

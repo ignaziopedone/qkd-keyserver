@@ -4,28 +4,25 @@ import kubernetes
 import base64
 import requests
 from uuid import uuid4 
-
-example_data = {
-    'keys' : [  {'key_ID' : 'exampleid1', 'key' : 'examplekey1'},
-                {'key_ID' : 'exampleid2', 'key' : 'examplekey2'}  ]}
+import os 
 
 logger = logging.getLogger('controller')
 
-def login(username:str, admin:bool=False) -> str :  
+def login(username:str, namespace:str=None, admin:bool=False) -> str :  
     api_instance = kubernetes.client.CoreV1Api()
-    
+    secret_namespace = os.environ['SECRET_NAMESPACE']
     try: 
         if not admin: 
             credential_secret = api_instance.read_namespaced_secret(f"{username}-credentials", "default").data
             username = base64.b64decode(credential_secret["username"]).decode()
             password = base64.b64decode(credential_secret["password"]).decode()
-            client_secret = api_instance.read_namespaced_secret(f"keycloak-secret", "default").data
+            client_secret = api_instance.read_namespaced_secret(f"keycloak-secret", secret_namespace).data
             client_id = base64.b64decode(client_secret["client_id"]).decode()
             client_secret = base64.b64decode(client_secret["client_secret"]).decode()
             data = f"client_id={client_id}&client_secret={client_secret}&grant_type=password&scope=openid&username={username}&password={password}"
             realm = "qks"
         else: 
-            credential_secret = api_instance.read_namespaced_secret(f"keycloak-secret", "default").data
+            credential_secret = api_instance.read_namespaced_secret(f"keycloak-secret", secret_namespace).data
             username = base64.b64decode(credential_secret["keycloak-user"]).decode()
             password = base64.b64decode(credential_secret["keycloak-password"]).decode()
             data = f"client_id=admin-cli&grant_type=password&scope=openid&username={username}&password={password}"
@@ -36,7 +33,7 @@ def login(username:str, admin:bool=False) -> str :
         token = x.json()['access_token']
     # perform login 
     except Exception as e: 
-        logger.error(f"Login error: impossible to authenticate user {username}")
+        logger.error(f"Login error: impossible to authenticate user {username} - {e}")
         token = None
     return token 
 
@@ -124,7 +121,7 @@ def keyreq_on_create(namespace, spec, body, name, **kwargs):
         master_SAE_ID = spec['master_SAE_ID']
         slave_SAE_ID = spec['slave_SAE_ID']
     except Exception as e: 
-        return {"error" : f"missing SAE ID {e}"}
+        return {"error" : f"missing SAE ID - {e}"}
     number = spec['number'] if 'number' in spec else None 
     size = spec['size'] if 'size' in spec else None 
     ids = spec['ids'] if 'ids' in spec else None 
@@ -132,7 +129,7 @@ def keyreq_on_create(namespace, spec, body, name, **kwargs):
     logger.info(f"master_SAE: {master_SAE_ID}, slave_SAE: {slave_SAE_ID}")
     if ids is None: # getKey
         logger.info(f"request for getKey - number: {number}, size: {size}")
-        token = login(master_SAE_ID) # authenticate retrieving master_SAE token from keycloak
+        token = login(master_SAE_ID, namespace=namespace) # authenticate retrieving master_SAE token from keycloak
         if token is None: 
             return {"message" : "ERROR in login"}
 
@@ -140,7 +137,7 @@ def keyreq_on_create(namespace, spec, body, name, **kwargs):
 
     else: #getKeyWithKeyIDs
         logger.info(f"request for a getKeyWithKeyIDs - IDs: {ids}")
-        token = login(slave_SAE_ID) # authenticate retrieving slave_SAE token from keycloak
+        token = login(slave_SAE_ID, namespace=namespace) # authenticate retrieving slave_SAE token from keycloak
         if token is None: 
             return {"message" : "ERROR in login"}
         
@@ -169,7 +166,7 @@ def sae_on_create(namespace, spec, body, name, **kwargs):
         createSecret(namespace, res, f"{sae_id}-credentials")
     
     # then register to QKS   
-    token = login(sae_id)
+    token = login(sae_id, namespace=namespace)
     if token is None: 
         return {"message" : "ERROR in login"} 
 
@@ -186,7 +183,7 @@ def sae_on_delete(namespace, spec, body, name, **kwargs):
      
     sae_id = spec['id']
     # unregister from QKS 
-    token = login(sae_id)
+    token = login(sae_id, namespace=namespace)
     if token is None: 
         return {"message" : "ERROR in login"} 
     

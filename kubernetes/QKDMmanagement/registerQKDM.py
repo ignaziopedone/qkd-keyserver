@@ -42,7 +42,7 @@ def createQksUser(username, password, role ):
 	return {"username" : username, "password" : password}
 
 def login(username, password, realm): 
-	client_id = "qks1"
+	client_id = "qks"
 	client_secret = "4f0d1cd9-4dc8-46b9-9651-fdfe118f53f8"
 	try: 
 		if realm == "master" : 
