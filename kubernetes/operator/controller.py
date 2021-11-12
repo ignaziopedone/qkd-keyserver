@@ -13,7 +13,7 @@ def login(username:str, namespace:str=None, admin:bool=False) -> str :
     secret_namespace = os.environ['SECRET_NAMESPACE']
     try: 
         if not admin: 
-            credential_secret = api_instance.read_namespaced_secret(f"{username}-credentials", "default").data
+            credential_secret = api_instance.read_namespaced_secret(f"{username}-credentials", namespace).data
             username = base64.b64decode(credential_secret["username"]).decode()
             password = base64.b64decode(credential_secret["password"]).decode()
             client_secret = api_instance.read_namespaced_secret(f"keycloak-secret", secret_namespace).data

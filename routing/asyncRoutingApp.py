@@ -392,12 +392,16 @@ async def main() :
     lsaUpdateTask = asyncio.create_task(lsaUpdate())
     listenForChangesTask = asyncio.create_task(listenForChanges())
     logger.info(f"main : created tasks for timer and pubsub listener")
-    server = await asyncio.start_server(receiveSocket, '0.0.0.0', 7000)
-    async with server:
-        await server.serve_forever()
-
-    lsaUpdateTask.cancel() 
-    listenForChangesTask.cancel() 
+    try: 
+        server = await asyncio.start_server(receiveSocket, '0.0.0.0', 7000)
+        async with server:
+            await server.serve_forever()
+    except Exception as e: 
+        logger.error(f"ERROR: unable to start listener - {e}")
+        return  
+    finally: 
+        lsaUpdateTask.cancel() 
+        listenForChangesTask.cancel() 
 
 
 if __name__ == "__main__":
