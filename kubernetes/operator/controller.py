@@ -5,6 +5,7 @@ import base64
 import requests
 from uuid import uuid4 
 import os 
+import time
 
 logger = logging.getLogger('controller')
 
@@ -115,7 +116,7 @@ def createSecret(namespace: str, key_data: dict, name:str) -> str:
 @kopf.on.create('qks.controller', 'v1', 'keyrequests')
 def keyreq_on_create(namespace, spec, body, name, **kwargs):
     logger.warning(f"A key request object has been created: {name}")
-
+    start = time.time()
     cr_name = name
     try: 
         master_SAE_ID = spec['master_SAE_ID']
@@ -133,7 +134,9 @@ def keyreq_on_create(namespace, spec, body, name, **kwargs):
         if token is None: 
             return {"message" : "ERROR in login"}
 
+        startqks = time.time()
         ret_data = getKey(slave_SAE_ID, number, size, token)
+        endqks = time.time()
 
     else: #getKeyWithKeyIDs
         logger.info(f"request for a getKeyWithKeyIDs - IDs: {ids}")
@@ -141,13 +144,17 @@ def keyreq_on_create(namespace, spec, body, name, **kwargs):
         if token is None: 
             return {"message" : "ERROR in login"}
         
+        startqks = time.time()
         ret_data = getKeyWithKeyIDs(master_SAE_ID, ids, token)
+        endqks = time.time()
  
     secret_data = {}
     for el in ret_data: 
         secret_data[el['key_ID']] = el['key']
     secret = createSecret(namespace, secret_data, cr_name)
-    logger.warning(f"created secret with name: {secret.metadata.name}")
+    end = time.time() 
+    logger.info(f"Request {cr_name} complete in {'{:.3f}'.format(end-start)} sec - QKS time: {'{:.3f}'.format(endqks-startqks)}")
+    logger.info(f"created secret with name: {secret.metadata.name}")
     return {"secret-name" : secret.metadata.name}
         
 @kopf.on.create('qks.controller', 'v1', 'saes')
