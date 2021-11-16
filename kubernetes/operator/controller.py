@@ -75,7 +75,7 @@ def getKey(slave_SAE_ID:str, number:int, size:int, token:str) -> list :
     req_data = {"size" : size, "number" : number}
     req = requests.post(f'http://qks-service:4000/api/v1/keys/{slave_SAE_ID}/enc_keys', json=req_data, headers=auth_header)
     if req.status_code != 200 : 
-        return []
+        return None
     return req.json()['keys']
 
 def getKeyWithKeyIDs(master_SAE_ID:str, ids:list, token:str) -> list : 
@@ -84,7 +84,7 @@ def getKeyWithKeyIDs(master_SAE_ID:str, ids:list, token:str) -> list :
     req_data = {"key_IDs" : ids}
     req = requests.post(f'http://qks-service:4000/api/v1/keys/{master_SAE_ID}/dec_keys', json=req_data, headers=auth_header)
     if req.status_code != 200 : 
-        return []
+        return None
     return req.json()['keys'] 
 
 def registerSAEtoQKS(sae_ID:str, token:str) -> bool : 
@@ -149,12 +149,19 @@ def keyreq_on_create(namespace, spec, body, name, **kwargs):
         endqks = time.time()
  
     secret_data = {}
+    if ret_data is None: 
+        logger.info(f"Request {cr_name} failed due to QKS error")
+        return 
+
+    id_list = []
     for el in ret_data: 
         secret_data[el['key_ID']] = el['key']
+        id_list.append(el['key_ID'])
     secret = createSecret(namespace, secret_data, cr_name)
     end = time.time() 
-    logger.info(f"Request {cr_name} complete in {'{:.3f}'.format(end-start)} sec - QKS time: {'{:.3f}'.format(endqks-startqks)}")
-    logger.info(f"created secret with name: {secret.metadata.name}")
+    logger.info(f"Request completed: {cr_name} in {'{:.3f}'.format(end-start)} sec - QKS time: {'{:.3f}'.format(endqks-startqks)}")
+    #logger.info(f"created secret with name: {secret.metadata.name}")
+    logger.info(f"ID list - {cr_name} : {id_list}")
     return {"secret-name" : secret.metadata.name}
         
 @kopf.on.create('qks.controller', 'v1', 'saes')
