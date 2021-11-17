@@ -54,3 +54,4 @@ Thumbs.db
 !.vscode/extensions.json
 *.code-workspace
 .vscode
+tests/**/*.txt
