@@ -55,3 +55,4 @@ Thumbs.db
 *.code-workspace
 .vscode
 tests/**/*.txt
+tests/routing/config_files/*.yaml

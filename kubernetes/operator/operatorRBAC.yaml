@@ -10,7 +10,7 @@ rules:
   resources: ["saes"]
   verbs: ["*"]
 - apiGroups: [""]
-  resources: ["configmaps"]
+  resources: ["events"]
   verbs: ["*"]
 - apiGroups: [""]
   resources: ["secrets"]
