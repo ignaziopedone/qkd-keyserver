@@ -1,5 +1,5 @@
 import json
-element_list = ["version", "type", "source", "routing", "neighbors", "timestamp", "auth"]
+element_list = ["version", "type", "source", "routing", "neighbors", "timestamp", "auth", "forwarder"]
 
 dims = {
     'version' : 1, 
@@ -11,7 +11,9 @@ dims = {
     'timestamp' : 18,
     'id_list' : 32, 
     'cost_list' : 1,
-    'auth' :  64}
+    'auth' :  64,
+    'forwarder': 32
+}
     
 
 class lsaPacket(): 
@@ -99,6 +101,12 @@ class lsaPacketRaw():
         b += tmp.encode()
         b += int(self.data['routing']['port']).to_bytes(dims['port'], 'big')
 
+        tmp = str(self.data['forwarder'])
+        diff = dims['forwarder'] - len(tmp)  
+        if (diff < 0):
+            return None 
+        tmp += '\0' * diff
+        b += tmp.encode()
 
         for n in self.data['neighbors'] : 
             tmp = str(n['ID'])
@@ -153,6 +161,9 @@ class lsaPacketRaw():
         start += dims['address']
         self.data['routing']['port'] = int.from_bytes(rawbytes[start:start+dims['port']], 'big')
         start += dims['port']
+
+        self.data['forwarder'] = rawbytes[start : start+dims['forwarder']].decode().replace('\0', '')
+        start += dims['forwarder']
 
         self.data['neighbors'] = []
         for i in range(0,nAdj) : 

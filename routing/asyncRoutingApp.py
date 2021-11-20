@@ -113,7 +113,8 @@ async def sendSocket (ptype : str , ptime : float) :
                     'routing' : {'address' : config['routing']['ip'], 'port' :  config['routing']['port']}, 
                     'timestamp' : ptime,
                     'type' : ptype,
-                    'auth' : ""
+                    'auth' : "",
+                    'forwarder' : me
                     }
                 if ptype == 'S': 
                     ids = graph.get_node(me).get_saes()
@@ -143,11 +144,13 @@ async def forwardSocket(packet : lsaPacket, ip : str) :
 
     global config , ksAddresses
     packet_srcID = packet.data['source']['ID']
+    forwarder = packet.data['forwarder']
+    packet.data['forwarder'] = config['qks']['id']
     res = True if (packet_srcID != config['qks']['id'] and ksTimestamps[packet_srcID][packet.data['type']] < packet.data['timestamp']) else False 
     if res: 
         for ks in list(ksAddresses.keys()) :
             addr = ksAddresses[ks]
-            if ks in graph.get_node(config['qks']['id']).get_neighbors().keys() and ip != addr['ip']:
+            if ks in graph.get_node(config['qks']['id']).get_neighbors().keys() and forwarder != ks:
                 logger.info(f"Forwarding: forwarding packet {packet.data['type']} from {packet.data['source']['ID']}  to {ks}")
                 reader, writer = await asyncio.open_connection(addr['ip'], addr['port'])
                 size = packet.get_dimension()
