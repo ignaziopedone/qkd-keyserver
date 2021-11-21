@@ -56,3 +56,5 @@ Thumbs.db
 .vscode
 tests/**/*.txt
 tests/routing/config_files/*.yaml
+
+**/*.pdf
