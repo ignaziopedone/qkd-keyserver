@@ -147,6 +147,7 @@ jsonDiagram {
         "address" : "String", 
         "port" : "Integer"
     }, 
+	"forwarder" : "String",
     "neighbors" : [
         {
             "ID" : "String",
