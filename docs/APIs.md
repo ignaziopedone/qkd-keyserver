@@ -40,6 +40,13 @@
 # Plant UML Codes 
 
 @startjson
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {   
     "**getStatus answer**" : "",
 	"source_KME_ID": "String",
@@ -57,31 +64,56 @@
 @endjson
 
 @startjson
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
     "**getGey request**":"",
     "number": "Integer",
     "size": "Integer",
     "extension_mandatory": [
-    {"name1": "anything"},
+    {"require_direct": "Bool"},
     "..."
     ]
 }
 @endjson
 
 @startjson
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
     "**getGey answer**":"",
     "keys": [
     {
-    "key_ID": "String (uuid4)",
+    "key_ID": "String",
     "key": "String"
     },
     "..."
-    ]
+    ],
+    "key_container_extension" : {
+        "direct_communication" : "Bool",
+        "returned_keys" : "Integer"
+    }
 }
 @endjson
 
 @startjson
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
     "**getGeyWithID request**":"",
     "key_IDs": [
@@ -106,24 +138,13 @@
 
 
 @startjson
-{
-    "**getPreferences answer**":"",
-    "preferences" :[
-        {"name" : "anything" },
-        "..."
-    ]
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
 }
-@endjson
-
-@startjson
-{
-    "**setPreference request**":"",
-    "preference" : "String",
-    "value" : "anything"
-}
-@endjson
-
-@startjson
+</style>
 {
     "**getQKDM answer**":"",
     "QKDM_list" : [
@@ -137,6 +158,13 @@
 @endjson
 
 @startjson
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
     "**registerQKDM request**":"",
     "QKDM_ID":"String",
@@ -150,18 +178,25 @@
 @endjson
 
 @startjson
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
     "**registerQKDM answer**":"",
     "database_data" : {
-        "ip_address" : "String",
+        "host" : "String",
         "port" : "Integer", 
-        "name" : "String",
+        "db_name" : "String",
         "username" : "String", 
         "password" : "String",
         "auth_src" : "String"
     },
     "vault_data" : {
-        "ip_address" : "String",
+        "host" : "String",
         "port" : "Integer",
         "secret_engine" : "String",
         "role_id" : "String",
@@ -171,6 +206,13 @@
 @endjson
 
 @startjson
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
     "**registerSAE request**":"",
     "id" : "String"
@@ -179,6 +221,13 @@
 
 
 @startjson
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
     "**startQKDMStream request**":"",
     "destination_qks_ID" : "String" 
@@ -187,6 +236,32 @@
 
 
 @startjson
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
+{
+    "**registerQKS request**":"",
+    "QKS_ID" : "String",
+    "QKD_IP" : "String", 
+    "QKS_port" : "Integer", 
+    "routing_IP" : "String", 
+    "routing_port" : "Integer"
+
+}
+@endjson
+
+@startjson
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
     "**reserveKeys request**":"",
     "key_stream_ID" : "String",
@@ -201,24 +276,29 @@
 @endjson
 
 @startjson
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
     "**createStream request**":"",
     "source_qks_ID" : "String",
     "key_stream_ID" : "String (uuid4)",
-    "qkdm_id" : "String",
-    "type" : "String"
-    "master_key_ID" : "String" 
+    "qkdm_id" : "String" 
 }
 @endjson
 
 @startjson
-{
-    "**createStream answer**":"",
-    "master_key_id" : "String"
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
 }
-@endjson
-
-@startjson
+</style>
 {
     "**closeStream request**":"",
     "source_qks_ID" : "String"
@@ -226,6 +306,13 @@
 @endjson
 
 @startjson
+<style>
+jsonDiagram {
+  node {
+	  BackGroundColor White
+	}
+}
+</style>
 {
     "**forwardData request**":"",
     "data" : "String",
@@ -246,15 +333,5 @@
     "routing_port" : "Integer"
 }
 @endjson
- 
-@startjson 
-{
-    "**exchangeIndirectKey request**": "", 
-    "iv" : "String", 
-    "number" : "Integer", 
-    "enc_key" : ["String", "..."],
-    "ids" : ["String", "..."]
-}
-@endjson 
 
 -->

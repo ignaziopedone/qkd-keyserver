@@ -4,7 +4,6 @@ import api
 import nest_asyncio
 import sys
 import logging 
-import traceback
 import aiohttp
 
 nest_asyncio.apply()
@@ -90,7 +89,7 @@ async def getKey(slave_SAE_ID):
             app.logger.info(f"getKey: error for slave_SAE {slave_SAE_ID} - message = {value['message']}")
             return value, 503
     except Exception as e:
-        app.logger.error(f"getKey EXCEPTION: {traceback.format_exc()}")
+        app.logger.error(f"getKey EXCEPTION: {e}")
         value = {'message' : "bad request: request does not contains a valid json object"}
         return value, 400 
 
@@ -414,7 +413,7 @@ async def forwardData():
             app.logger.warning(f"forwardData: error for destination_sae = {destination_sae} - message = {value['message']}")
             return value, 503 
     except Exception as e: 
-        app.logger.error(f"forwardData EXCEPTION: {traceback.format_exc()}")
+        app.logger.error(f"forwardData EXCEPTION: {e}")
         value = {'message' : "error: invalid content"}
         return value, 400
 
@@ -457,18 +456,6 @@ async def closeStream(key_stream_ID):
         app.logger.error(f"closeStream EXCEPTION: {e}")
         value = {'message' : "error: invalid content"}
         return value, 400
-
-@app.route("/test", methods=['POST'])
-async def test(): 
-    app.logger.warning(f"test EXECUTED")
-    header = request.headers.get('Authorization')
-    res, username, roles = await verifyToken(header)
-    
-    if res: 
-        val = {'user' : username, 'roles' : roles}
-        return val, 200
-    else: 
-        return {"message": "Invalid Token"}, 401
     
 
 async def main() : 
