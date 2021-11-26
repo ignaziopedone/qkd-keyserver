@@ -34,7 +34,12 @@
 
 
 ## JSONs data
-![](./img/API_server_JSON.png)
+### Northbound interface
+![](./img/northbound_json.png)
+### Southbound interface 
+![](./img/southbound_json.png)
+#### External interface
+![](./img/external_json.png)
 
 <!-- 
 # Plant UML Codes 

@@ -1,16 +1,13 @@
 # DB model 
 
 ## MongoDB view 
-![](./img/DB_model_JSON_server.png)
+![](./img/db_model.png)
 
 ## Routing packet
-<img src="img/qkdLSA_Packet.png" width="600"/>
+<img src="img/routing_packet.svg" width="500"/>
 
 ## Routing tables
-<img src="img/RoutingTable_model_JSON.png" width="200"/>
-
-<!-- ![](img/qkdLSA_Packet.png)
-![](img/RoutingTable_model_JSON.png) -->
+<img src="img/routing_table.svg" width="150"/>
 
 <!-- 
 # PlantUML JSON Codes
