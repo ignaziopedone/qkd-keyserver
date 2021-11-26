@@ -1,5 +1,5 @@
 mongo_db:
-  host: 172.18.0.10
+  host: mongodb
   port: 27017
   user: rootuser
   password: rootpwd
@@ -17,6 +17,6 @@ redis:
   user: root
   password: password 
   topic: register3 
-  host: 172.18.0.30 
+  host: redis
   port: 6379
   db : 3

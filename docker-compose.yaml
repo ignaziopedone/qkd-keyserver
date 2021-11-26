@@ -1,29 +1,19 @@
 version: "3.9"
 
-networks:
-    frontend:
-      ipam:
-        config:
-          - subnet: 172.18.0.0/24
-
-
 services: 
-    db:
+    mongodb:
         image: mongo
-        container_name: mongo_auth
+        container_name: mongodb
         ports: 
             - 27017:27017
         environment: 
             MONGO_INITDB_ROOT_USERNAME : rootuser
             MONGO_INITDB_ROOT_PASSWORD : rootpwd
             MONGO_INITDB_DATABASE: admin
-        networks:
-            frontend:
-                ipv4_address: 172.18.0.10
 
     vault:
         image: vault
-        container_name: vault_notls
+        container_name: vault
         ports:
             - 8200:8200
         volumes:
@@ -31,21 +21,15 @@ services:
         cap_add:
             - IPC_LOCK
         entrypoint: vault server -config=/vault/config/vault_config.json
-        networks:
-            frontend:
-                ipv4_address: 172.18.0.20
 
     redis: 
         image: redis 
-        container_name: redis_auth
+        container_name: redis
         ports:
             - 6379:6379
         volumes: 
             - ./qks_core/config_files/redis.conf:/usr/local/etc/redis/redis.conf
         command: redis-server /usr/local/etc/redis/redis.conf
-        networks:
-            frontend:
-                ipv4_address: 172.18.0.30
 
     keycloak:
         image: jboss/keycloak
@@ -56,9 +40,6 @@ services:
             KEYCLOAK_USER: admin
             KEYCLOAK_PASSWORD: password
             DB_VENDOR: H2
-        networks:
-            frontend:
-                ipv4_address: 172.18.0.40
 
 
     ##### QKS 1 SERVICES 
@@ -68,9 +49,6 @@ services:
         ports: 
             - 4001:4000 
         command: config_files/config.yaml
-        networks: 
-            frontend: 
-                ipv4_address: 172.18.0.181
 
     routing1:
         image: routing:async
@@ -78,9 +56,6 @@ services:
         ports: 
             - 7001:7000 
         command: config_files/config.yaml
-        networks: 
-            frontend: 
-                ipv4_address: 172.18.0.161 
     
     qkdm1:
         image: qkdm:async
@@ -89,8 +64,5 @@ services:
             - 5001:5000 
             - 6001:6000
         command: config_files/config.yaml
-        networks: 
-            frontend: 
-                ipv4_address: 172.18.0.101
 
     
