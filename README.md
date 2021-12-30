@@ -151,7 +151,18 @@ spec:
         value: qkdns		# name of the namespace where master secrets and credentials are located
 ```
 
-Once the operator is deployed, SAEs can be registered creating a `sae` resource specifying the name and `true` in the `registration_auto` parameter. 
+
+## QKS deployment in Docker
+This section describes how to deploy the entire QKS stack in Docker. 
+The same configuration files described in the Kubernetes section are required with Docker, despite they are not deployed through configMaps and secrets. Example files can be found in the `qks_core/config_files` and in the `routing/config_files` folder for the QKS, and in its [repository](https://github.com/ignaziopedone/qkd-module/tree/async) for the QKDM in the async branch. 
+For each pod that requires a configuration file injected through a configMap, the configuration file should be injected through a volume in the same path as the configMap. Environment variables injected through secrets here must be passed directly as variables in the container arguments or through Docker secrets. There are no differences in the parameters of the configuration files between the two deployment scenarios. 
+To simplify the deployment a *docker-compose* file can be used, but it does not solve the issues related to the injection of configuration data and the required deployment sequence described in the Kubernetes section. 
+If a docker-compose is used each container can reach the others via their container name, the mapping between the name and the IP address is performed directly by Docker when the container is created through Docker networking functionalities, while services must be replaced with the corresponding port mapping.  
+An example docker-compose file can be found in the GitHub repository.
+
+# Operator resources usage 
+Two types of custom resources have been defined with the Kubernetes operator: `Sae` and `KeyRequest` 
+Once the operator is deployed, SAEs can be registered to the QKS creating a `Sae` resource specifying the name and `true` in the `registration_auto` parameter. 
 With the SAE correctly registered, its Keycloak credentials can be accessed by administrators in the secret `<sae_name>-credentials` in the namespace it is deployed into.
 An example of a `sae` object is reported here: 
 ```
@@ -163,30 +174,40 @@ spec:
   id: sae_A01 
   registration_auto: true 
 ```
+If the `registration_auto` parameter is set to `false` the operator will not perform the registration to Keycloak, but will only check for credentials in the corresponding secret. If the secret is not present or the SAE is not correctly registered to Keycloak the operator will throw an exception. 
+If a `Sae` object is deleted the corresponding SAE is unregistered from the QKS, but the Keycloak account is not removed: it can be registered again creating the `Sae` resource with `registration_auto` set to `false`. 
+
+`KeyRequest` objects can be used to retrieve shared keys between two SAEs. 
 To retrieve a key create a `keyRequest` object specifying the master and the slave SAEs and the key requested. To retrieve keys already reserved insert their IDs in the `ids` parameter. If the request is completed successfully a secret with the same name as the keyRequests will be created in the SAE namespace, in case of failure nothing will be created and the requests should be recreated; no *retry* behaviours have been implemented. 
-Because resource names in Kubernetes have to be unique in a namespace each SAE should identify a way to produce unique names such as UUIDs. 
-An example of a `keyRequest` object is reported here: 
+The operator automates the API calls to the QKS, thus if the requests do not match the QKS parameters they will fail: the operator does not perform any check on the correctness of the parameters. If the calling SAE is not correctly registered to Keycloak and its credentials are not available in the corresponding secret the operator will throw an exception. 
+Because resource names in Kubernetes have to be unique in a namespace each SAE should identify a way to produce unique names such as UUIDs or timestamps for the `KeyRequests`. 
+An example of a `keyRequest` object from the master SAE that will trigger a `getKey` request is reported here: 
 ```
 apiVersion: "qks.controller/v1"
 kind: KeyRequest
 metadata:
-  name: requestA
+  name: A01B02master
 spec:
-  number: 1
+  number: 2
   size: 128
   master_SAE_ID: sae_A01 
   slave_SAE_ID: sae_B02
 ```
-
-## QKS deployment in Docker
-This section describes how to deploy the entire QKS stack in Docker. 
-The same configuration files described in the Kubernetes section are required with Docker, despite they are not deployed through configMaps and secrets. Example files can be found in the `qks_core/config_files` and in the `routing/config_files` folder for the QKS, and in its [repository](https://github.com/ignaziopedone/qkd-module/tree/async) for the QKDM in the async branch. 
-For each pod that requires a configuration file injected through a configMap, the configuration file should be injected through a volume in the same path as the configMap. Environment variables injected through secrets here must be passed directly as variables in the container arguments or through Docker secrets. There are no differences in the parameters of the configuration files between the two deployment scenarios. 
-To simplify the deployment a *docker-compose* file can be used, but it does not solve the issues related to the injection of configuration data and the required deployment sequence described in the Kubernetes section. 
-If a docker-compose is used each container can reach the others via their container name, the mapping between the name and the IP address is performed directly by Docker when the container is created through Docker networking functionalities, while services must be replaced with the corresponding port mapping.  
-An example docker-compose file can be found in the GitHub repository.
-
-
+An example of a `keyRequest` object from the slave SAE that will trigger a `getKeyWithKeyIDs` request is reported here:
+```
+apiVersion: "qks.controller/v1"
+kind: KeyRequest
+metadata:
+  name: A01B02slave
+spec:
+  master_SAE_ID: sae_A01 
+  slave_SAE_ID: sae_B02
+  ids: 
+  - b9a7f7b3-3ba4-43c8-b155-c2ef533e115a
+  - 07e060e1-48d6-4072-a289-0b5398a900f4
+``` 
+The returned keys can be found in a `secret` with the same name of the `keyRequest`, in the same namespace of the request resource. 
+Deleting a `KeyRequest` resource does not trigger any behaviour on the operator, secrets should be removed independently from the request resources. 
 
 # Files and modules 
 ## qks_core
