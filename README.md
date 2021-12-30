@@ -207,6 +207,7 @@ spec:
   - 07e060e1-48d6-4072-a289-0b5398a900f4
 ``` 
 The returned keys can be found in a `secret` with the same name of the `keyRequest`, in the same namespace of the request resource. 
+The key ids in the requests from the slave SAE should match the ids returned to the master one. If some keys are not available in the slave QKS, only the available ones will be returned and saved in the corresponding secret. 
 Deleting a `KeyRequest` resource does not trigger any behaviour on the operator, secrets should be removed independently from the request resources. 
 
 # Files and modules 
