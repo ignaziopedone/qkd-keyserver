@@ -11,7 +11,11 @@ All the developed Docker images are available on [DockerHub](https://hub.docker.
 
 ## QKS core 
 The `qks_core` files have been packaged in a *Docker image* to simplify the deployment of the app. The Docker image can be built from the `Dockerfile` in the same folder as the code, with the command: 
-```docker build -f <path/to/dockerfile> -t <image_name:image_tag>```
+``` docker build -f <path/to/dockerfile> -t <image_name:image_tag>```
+Note that in a production environment the *Quart* web server should by run directly through the Python file, but an ASGI webserver (e.g. [Hypercorn](https://pgjones.gitlab.io/hypercorn/)) should be used in front of it. 
+To run the server with Hypercorn use the command: 
+``` hypercorn server:app ```
+The Docker image should be modified accordingly.
 
 ### Interaction with other components
 The interaction with MongoDB is performed through the official [motor](https://github.com/mongodb/motor) library, which provides support to asynchronous communication with the Python standard library `asyncio`. 
