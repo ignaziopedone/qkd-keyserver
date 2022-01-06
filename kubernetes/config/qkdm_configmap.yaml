@@ -20,12 +20,12 @@ data:
       port: 27017
       user: qkdm1
     qkd_device:
-      host: 130.192.1.86 # OTHER CLUSTER ADDRESS! 
+      host: 192.168.1.13 # OTHER CLUSTER ADDRESS! 
       port:  6000 # LISTENER: CONTAINER PORT - SENDER: NODE PORT
       role: receiver
     qkdm:
       dest_ID: qkdm2
-      dest_IP: 130.192.1.86 # OTHER CLUSTER ADDRESS! 
+      dest_IP: 192.168.1.13 # OTHER CLUSTER ADDRESS! 
       dest_port: 31000 # OTHER CLUSTER NODEPORT! 
       id: qkdm1
       init: true
