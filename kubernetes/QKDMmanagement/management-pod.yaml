@@ -7,5 +7,6 @@ spec:
   containers:
   - name: qkdmmanagement
     image: lorenzopintore/qkdm_management
+    #args: ["1"]
     args: ["2", "qkdm4", "qks2", "qkdm5"] # 2, qkdmID, dest_qks, dest_qkdm
     #args: ["3", "qks2", "10.1.1.1", "4000", "10.1.1.1", "7000"] # 3, QKS_ID, QKS_IP, QKS_port, routing_IP, routing_port
