@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qkdm-deployment
+  labels:
+    app: qkdm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qkdm
+  template:
+    metadata:
+      labels:
+        app: qkdm
+    spec:
+      containers:
+      - name: qkdm
+        image: ignaziopedone/qkd:qkdm-2.0
+        ports:
+        - containerPort: 5000
+        - containerPort: 6000
+        volumeMounts:
+        - mountPath: /usr/app/qkd-module/qkdm_src/config_files
+          name: config
+      volumes: 
+        - name: config 
+          configMap: 
+            name: qkdm-configmap
+            items: 
+            - key: qkdm-config
+              path: config.yaml
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: qkdm-service
+spec:
+  selector:
+    app: qkdm
+  type: NodePort 
+  ports:
+    - name: qkdm
+      protocol: TCP
+      port: 5000
+      targetPort: 5000
+      nodePort: 31000
+    - name: qkddevice 
+      protocol: TCP
+      port: 6000
+      targetPort: 6000
+      nodePort: 31500
+

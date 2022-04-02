@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qkd-operator
+  labels:
+    app: qkd-operator
+spec:
+  replicas: 1 # make sure to not have more than one replicas
+  strategy:
+    type: Recreate # make sure the old pod is being killed before the new pod is being created
+  selector:
+    matchLabels:
+      app: qkd-operator
+  template:
+    metadata:
+      labels:
+        app: qkd-operator
+    spec:
+      serviceAccountName: qkd-operator
+      containers:
+      - name: qkd-operator
+        image: ignaziopedone/qkd:qks_operator
+        env: 
+        - name: SECRET_NAMESPACE 
+          value: qkdns

@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: routing-deployment
+  labels:
+    app: routing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: routing
+  template:
+    metadata:
+      labels:
+        app: routing
+    spec:
+      containers:
+      - name: routing
+        image: ignaziopedone/qkd:routing
+        ports:
+        - containerPort: 7000
+        volumeMounts:
+        - mountPath: /usr/app/qkd-keyserver/routing/config_files
+          name: config
+      volumes: 
+        - name: config 
+          configMap: 
+            name: routing-configmap
+            items: 
+            - key: routing-config
+              path: config.yaml
+
+  
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: routing-service
+spec:
+  selector:
+    app: routing
+  type: NodePort
+  ports:
+    - protocol: TCP
+      port: 7000
+      targetPort: 7000
+      nodePort: 30500
+

@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-deployment
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis
+        ports:
+        - containerPort: 6379
+        command:
+          - redis-server
+          - "/redis-conf/redis.conf"
+        volumeMounts:
+        - mountPath: /redis-conf
+          name: config
+      volumes: 
+        - name: config 
+          configMap: 
+            name: redis-configmap
+            items: 
+            - key: redis-config
+              path: redis.conf
+
+  
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+spec:
+  selector:
+    app: redis
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379

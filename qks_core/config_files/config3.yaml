@@ -1,0 +1,32 @@
+mongo_db:
+  host: mongodb
+  port: 27017
+  user: rootuser
+  password: rootpwd
+  auth_src : admin
+  db : qks3
+qks:
+  id: qks3
+  ip: qks_3
+  port: 4000
+  max_key_per_request: 20
+  max_key_size: 512
+  min_key_size: 128
+  max_sae_id_count: 0
+  indirect_max_key_count: 20
+vault: 
+  host : vault
+  port : 8200
+  token : s.IvlbsITnckYx3RRxBDC24iLS
+  key64 : TjPNkjfDN1hwM6K7kXupVaTLkx6RMXu1crwWGMJucUM=
+redis: 
+  user: root
+  password: password 
+  topic: register3 
+  host: redis
+  port: 6379
+  db : 3
+keycloak: 
+  realm: qks
+  address: keycloak
+  port : 8080

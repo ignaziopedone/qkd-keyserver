@@ -1,0 +1,60 @@
+
+### Python ###
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+
+# Distribution / packaging
+
+build/
+dist/
+downloads/
+var/
+MANIFEST
+
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+docs/_build/
+doc/_build/
+
+target/
+.ipynb_checkpoints
+profile_default/
+ipython_config.py
+
+.python-version
+
+# Environments
+# .env
+.env/
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+pythonenv*
+
+# thumbnail cache on Windows
+Thumbs.db
+
+### vscode ###
+.vscode/*
+*/.vscode/*
+.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+.vscode
+tests/**/*.txt
+tests/routing/config_files/*.yaml
+
+**/*.pdf

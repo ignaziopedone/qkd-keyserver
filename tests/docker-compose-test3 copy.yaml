@@ -1,0 +1,172 @@
+version: "3.9"
+
+networks:
+    frontend:
+      ipam:
+        config:
+          - subnet: 172.18.0.0/24
+
+
+services: 
+    db:
+        image: mongo
+        container_name: mongo_auth
+        ports: 
+            - 27017:27017
+        environment: 
+            MONGO_INITDB_ROOT_USERNAME : rootuser
+            MONGO_INITDB_ROOT_PASSWORD : rootpwd
+            MONGO_INITDB_DATABASE: admin
+        networks:
+            frontend:
+                ipv4_address: 172.18.0.10
+
+    vault:
+        image: vault
+        container_name: vault_notls
+        ports:
+            - 8200:8200
+        volumes:
+            - ./qks_core/config_files/vault_config.json:/vault/config/vault_config.json
+        cap_add:
+            - IPC_LOCK
+        entrypoint: vault server -config=/vault/config/vault_config.json
+        networks:
+            frontend:
+                ipv4_address: 172.18.0.20
+
+    redis: 
+        image: redis 
+        container_name: redis_auth
+        ports:
+            - 6379:6379
+        volumes: 
+            - ./qks_core/config_files/redis.conf:/usr/local/etc/redis/redis.conf
+        command: redis-server /usr/local/etc/redis/redis.conf
+        networks:
+            frontend:
+                ipv4_address: 172.18.0.30
+
+    keycloak:
+        image: jboss/keycloak
+        container_name: keycloak
+        ports:
+            - 8080:8080
+        environment:
+            KEYCLOAK_USER: admin
+            KEYCLOAK_PASSWORD: password
+            DB_VENDOR: H2
+        networks:
+            frontend:
+                ipv4_address: 172.18.0.40
+
+
+    ##### QKS 1 SERVICES 
+    qks1:
+        image: qks:async
+        container_name : qks_1
+        ports: 
+            - 4001:4000 
+        command: config_files/config.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.181
+
+    routing1:
+        image: routing:async
+        container_name : routing_1
+        ports: 
+            - 7001:7000 
+        command: config_files/config.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.161 
+    
+    qkdm1:
+        image: qkdm:async
+        container_name : qkdm_1
+        ports: 
+            - 5001:5000 
+            - 6001:6000
+        command: config_files/config.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.101
+
+    ##### QKS 2 SERVICES 
+    qks2:
+        image: qks:async
+        container_name : qks_2
+        ports: 
+            - 4002:4000 
+        command: config_files/config2.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.182
+
+    routing2:
+        image: routing:async
+        container_name : routing_2
+        ports: 
+            - 7002:7000 
+        command: config_files/config2.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.162 
+    
+    qkdm2a:
+        image: qkdm:async
+        container_name : qkdm_2a
+        ports: 
+            - 5002:5000 
+            - 6002:6000
+        command: config_files/config2a.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.102
+
+    qkdm2b:
+        image: qkdm:async
+        container_name : qkdm_2b
+        ports: 
+            - 5000:5000 
+            - 6000:6000
+        command: config_files/config2b.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.100
+
+
+    ##### QKS 3 SERVICES
+    qks3:
+        image: qks:async
+        container_name : qks_3
+        ports: 
+            - 4003:4000 
+        command: config_files/config3.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.183
+
+    routing3:
+        image: routing:async
+        container_name : routing_3
+        ports: 
+            - 7003:7000 
+        command: config_files/config3.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.163 
+    
+    qkdm3:
+        image: qkdm:async
+        container_name : qkdm_3
+        ports: 
+            - 5003:5000 
+            - 6003:6000
+        command: config_files/config3.yaml
+        networks: 
+            frontend: 
+                ipv4_address: 172.18.0.103
+
+

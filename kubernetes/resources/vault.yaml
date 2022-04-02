@@ -1,0 +1,64 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault-service
+spec:
+  selector:
+    app: vault
+  ports:
+    - protocol: TCP
+      port: 8200
+      targetPort: 8200
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vault-statefulset
+  labels:
+    app: vault
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault
+  serviceName: vault-service
+  template:
+    metadata:
+      labels:
+        app: vault
+    spec:
+      containers:
+      - name: vault
+        image: vault
+        ports:
+        - containerPort: 8200
+        command:
+          ["vault", "server", "-config=/vault-conf/vault_config.json"]
+        volumeMounts:
+        - name: config
+          mountPath: /vault-conf
+        - name: vault-pvc
+          mountPath: /vault/file
+        env:
+        - name: VAULT_ADDR
+          value: http://127.0.0.1:8200
+      volumes: 
+        - name: config 
+          configMap: 
+            name: vault-configmap
+            items: 
+            - key: vault-config
+              path: vault_config.json
+  volumeClaimTemplates:
+  - metadata:
+      name: vault-pvc
+      annotations:
+        volume.beta.kubernetes.io/storage-class: "manual"
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 100Mi
+

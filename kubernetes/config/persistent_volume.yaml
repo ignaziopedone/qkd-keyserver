@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: qks-pv1
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  accessModes: 
+    - ReadWriteOnce
+  capacity:
+    storage: 100Mi
+  hostPath:
+    path: "/mnt/k8s/pv1"
+
+--- 
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: qks-pv2
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  accessModes: 
+    - ReadWriteOnce
+  capacity:
+    storage: 100Mi
+  hostPath:
+    path: "/mnt/k8s/pv2"

@@ -1,0 +1,68 @@
+version: "3.9"
+
+services: 
+    mongodb:
+        image: mongo
+        container_name: mongodb
+        ports: 
+            - 27017:27017
+        environment: 
+            MONGO_INITDB_ROOT_USERNAME : rootuser
+            MONGO_INITDB_ROOT_PASSWORD : rootpwd
+            MONGO_INITDB_DATABASE: admin
+
+    vault:
+        image: vault
+        container_name: vault
+        ports:
+            - 8200:8200
+        volumes:
+            - ./qks_core/config_files/vault_config.json:/vault/config/vault_config.json
+        cap_add:
+            - IPC_LOCK
+        entrypoint: vault server -config=/vault/config/vault_config.json
+
+    redis: 
+        image: redis 
+        container_name: redis
+        ports:
+            - 6379:6379
+        volumes: 
+            - ./qks_core/config_files/redis.conf:/usr/local/etc/redis/redis.conf
+        command: redis-server /usr/local/etc/redis/redis.conf
+
+    keycloak:
+        image: jboss/keycloak
+        container_name: keycloak
+        ports:
+            - 8080:8080
+        environment:
+            KEYCLOAK_USER: admin
+            KEYCLOAK_PASSWORD: password
+            DB_VENDOR: H2
+
+
+    ##### QKS 1 SERVICES 
+    qks1:
+        image: qks:async
+        container_name : qks_1
+        ports: 
+            - 4001:4000 
+        command: config_files/config.yaml
+
+    routing1:
+        image: routing:async
+        container_name : routing_1
+        ports: 
+            - 7001:7000 
+        command: config_files/config.yaml
+    
+    qkdm1:
+        image: qkdm:async
+        container_name : qkdm_1
+        ports: 
+            - 5001:5000 
+            - 6001:6000
+        command: config_files/config.yaml
+
+    

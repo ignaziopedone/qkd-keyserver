@@ -1,0 +1,22 @@
+mongo_db:
+  host: mongodb
+  port: 27017
+  user: rootuser
+  password: rootpwd
+  auth_src : admin
+  db : qks1_db
+qks:
+  id: qks1
+  ip: 172.18.0.181
+  port: 4000
+routing: 
+  timer : 20
+  port : 7000
+  ip: 172.18.0.161
+redis: 
+  user: root
+  password: password 
+  topic: register1 
+  host: redis
+  port: 6379
+  db : 1

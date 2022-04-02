@@ -1,0 +1,17 @@
+FROM python:3.9
+
+WORKDIR /usr/app
+
+RUN apt-get update
+RUN apt-get -y install git
+RUN git clone https://github.com/ignaziopedone/qkd-keyserver.git 
+
+WORKDIR /usr/app/qkd-keyserver 
+RUN git checkout async 
+
+RUN python -m pip install -r ./routing/requirements.txt
+
+EXPOSE 7000 
+ 
+ENTRYPOINT [ "python", "-u", "routing/asyncRoutingApp.py"]
+CMD ["routing/config_files/config.yaml"]

@@ -1,0 +1,6 @@
+aiohttp==3.3.1
+aioredis==2.0.0
+motor==2.4.0
+nest-asyncio==1.5.1
+pymongo==3.11.4
+PyYAML==5.4.1

@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qks-deployment
+  labels:
+    app: qks
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qks
+  template:
+    metadata:
+      labels:
+        app: qks
+    spec:
+      containers:
+      - name: qks
+        image: ignaziopedone/qkd:qks-kube
+        ports:
+        - containerPort: 4000
+        volumeMounts:
+        - mountPath: /usr/app/qkd-keyserver/qks_core/config_files
+          name: config
+      volumes: 
+        - name: config 
+          configMap: 
+            name: qks-configmap
+            items: 
+            - key: qks-config
+              path: config.yaml
+
+  
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: qks-service
+spec:
+  selector:
+    app: qks
+  type: NodePort  
+  ports:
+    - protocol: TCP
+      port: 4000
+      targetPort: 4000
+      nodePort: 30000
+

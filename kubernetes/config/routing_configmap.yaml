@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: routing-configmap
+data:
+  routing-config: |
+    mongo_db:
+      host: mongodb-service
+      port: 27017
+      user: rootuser
+      password: rootpwd
+      auth_src : admin
+      db : qks
+    qks:
+      id: qks1  
+      ip: 192.168.1.12 # data for routing : node address!
+      port: 30000 # data for routing : node port!
+    routing: 
+      timer : 20
+      port : 30500 # data for routing : node port!
+      ip: 192.168.1.12 # data for routing : node address!
+    redis: 
+      user: root
+      password: password 
+      topic: register
+      host: redis-service
+      port: 6379
+      db : 1
